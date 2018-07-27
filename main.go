@@ -53,7 +53,7 @@ func main() {
 	}
 
 	// allocate records chan
-	recordsChan = make(chan Record, options.Batch.Size)
+	recordsChan = make(chan Record, options.Batch.Size*2*len(options.Redis.URLs))
 
 	// output routines
 	go outputRoutine()
