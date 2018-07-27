@@ -21,8 +21,10 @@ var (
 	recordsChan chan Record
 	esClient    *elastic.Client
 
-	shutdownMark  = false
-	shutdownGroup = &sync.WaitGroup{}
+	inputExiting  = false
+	inputGroup    = &sync.WaitGroup{}
+	outputExiting = false
+	outputGroup   = &sync.WaitGroup{}
 )
 
 func verbose(s ...interface{}) {
@@ -65,11 +67,17 @@ func main() {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 	<-shutdown
-	shutdownMark = true
 
 	// wait for all goroutines complete
 	log.Println("SIGNAL: exiting...")
-	shutdownGroup.Wait()
+
+	// stop all inputs
+	inputExiting = true
+	inputGroup.Wait()
+
+	// stop output
+	outputExiting = true
+	outputGroup.Wait()
 }
 
 func inputRoutine(idx int) {
@@ -79,7 +87,7 @@ func inputRoutine(idx int) {
 			log.Println(" INPUT: routine failed", idx, err)
 		}
 		// check shutdown mark
-		if shutdownMark {
+		if inputExiting {
 			return
 		}
 		// sleep 3 seconds and retry
@@ -88,9 +96,9 @@ func inputRoutine(idx int) {
 }
 
 func unsafeInputRoutine(idx int) (err error) {
-	// manage shutdownGroup
-	shutdownGroup.Add(1)
-	defer shutdownGroup.Done()
+	// manage inputGroup
+	inputGroup.Add(1)
+	defer inputGroup.Done()
 	// logging
 	log.Println(" INPUT: routine created", idx)
 	defer log.Println(" INPUT: routine exited", idx)
@@ -108,7 +116,7 @@ func unsafeInputRoutine(idx int) (err error) {
 	)
 	for {
 		// check shutdown mark
-		if shutdownMark {
+		if inputExiting {
 			verbose(" INPUT: exiting due to shutdown mark", idx)
 			return
 		}
@@ -135,16 +143,19 @@ func unsafeInputRoutine(idx int) (err error) {
 }
 
 func outputRoutine() {
-	// manage shutdownGroup
-	shutdownGroup.Add(1)
-	defer shutdownGroup.Done()
+	// manage inputGroup
+	outputGroup.Add(1)
+	defer outputGroup.Done()
+	// logging
+	log.Println("OUTPUT: running")
+	defer log.Println("OUTPUT: exiting")
 
 	// temporary slice of records
 	rs := make([]Record, 0, options.Batch.Size)
 
 	for {
-		// check for the shutdownMark
-		if shutdownMark {
+		// check for the outputExiting
+		if outputExiting && len(recordsChan) == 0 {
 			verbose("OUTPUT: exiting due to shutdown mark")
 			break
 		}
