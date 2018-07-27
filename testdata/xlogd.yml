@@ -1,0 +1,11 @@
+time_offset: -8
+batch:
+  size: 10
+  timeout: 3
+redis:
+  urls:
+    - redis://127.0.0.1:6379
+  key: xlog
+elasticsearch:
+  urls:
+    - http://127.0.0.1:9200
