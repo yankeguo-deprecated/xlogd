@@ -15,6 +15,8 @@ type Record struct {
 	Crid      string                 `json:"crid"`              // correlation id
 	Message   string                 `json:"message,omitempty"` // the actual log message body
 	Extra     map[string]interface{} `json:"extra,omitempty"`   // extra structured data
+
+	NoTimeOffset bool `json:"-"` // should skip timestamp offset
 }
 
 // Index index for record in elasticsearch

@@ -133,8 +133,10 @@ func unsafeInputRoutine(idx int) (err error) {
 			verbose(" INPUT: conversion failed", idx)
 			continue
 		}
-		// fix time offset
-		r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
+		// fix time if needed
+		if !r.NoTimeOffset {
+			r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
+		}
 		// append to channel
 		recordsChan <- r
 		verbose(" INPUT: record queued", idx, r)

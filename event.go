@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	eventProjectJSON = "_json_"
+	eventTopicJSON = "_json_"
 )
 
 var (
@@ -41,8 +41,8 @@ func (b Event) ToRecord() (r Record, ok bool) {
 	if ok = decodeBeatSource(b.Source, &r); !ok {
 		return
 	}
-	// decode extra if event.project == _json_
-	if r.Project == eventProjectJSON {
+	// decode extra if event.topic == _json_
+	if r.Topic == eventTopicJSON {
 		if ok = decodeExtra(&r); !ok {
 			return
 		}
@@ -120,6 +120,7 @@ func decodeExtra(r *Record) bool {
 		if r.Timestamp, err = time.Parse(time.RFC3339, timestampStr); err != nil {
 			return false
 		}
+		r.NoTimeOffset = true
 		delete(r.Extra, "timestamp")
 	}
 	// clear the message
