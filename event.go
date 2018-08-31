@@ -97,33 +97,49 @@ func decodeExtra(r *Record) bool {
 	if err = json.Unmarshal([]byte(r.Message), &r.Extra); err != nil {
 		return false
 	}
-	// extract topic field
-	if topic, ok := r.Extra["topic"].(string); ok {
-		r.Topic = topic
-		delete(r.Extra, "topic")
-	} else {
-		// fail if topic is not set
+	// topic must exist
+	if !decodeExtraStr(r.Extra, "topic", &r.Topic) {
 		return false
 	}
-	// extract project field, override Record if existed
-	if project, ok := r.Extra["project"].(string); ok {
-		r.Project = project
-		delete(r.Extra, "project")
-	}
-	// extract crid field, override Record if existed
-	if crid, ok := r.Extra["crid"].(string); ok {
-		r.Crid = crid
-		delete(r.Extra, "crid")
-	}
-	// extract timestamp field, override Record if existed
-	if timestampStr, ok := r.Extra["timestamp"].(string); ok {
-		if r.Timestamp, err = time.Parse(time.RFC3339, timestampStr); err != nil {
-			return false
-		}
+	// optional extra 'project', 'crid'
+	decodeExtraStr(r.Extra, "project", &r.Project)
+	decodeExtraStr(r.Extra, "crid", &r.Crid)
+	// optional extract 'timestamp'
+	if decodeExtraTime(r.Extra, "timestamp", &r.Timestamp) {
 		r.NoTimeOffset = true
-		delete(r.Extra, "timestamp")
 	}
 	// clear the message
 	r.Message = ""
 	return true
+}
+
+func decodeExtraStr(m map[string]interface{}, key string, out *string) bool {
+	if m == nil || out == nil {
+		return false
+	}
+	if val, ok := m[key].(string); ok {
+		val = strings.TrimSpace(val)
+		delete(m, key) // always delete
+		if len(val) > 0 {
+			*out = val // update if not empty
+			return true
+		}
+	}
+	return false
+}
+
+func decodeExtraTime(m map[string]interface{}, key string, out *time.Time) bool {
+	if m == nil || out == nil {
+		return false
+	}
+	var tsStr string
+	if decodeExtraStr(m, key, &tsStr) {
+		if t, err := time.Parse(time.RFC3339, tsStr); err != nil {
+			return false
+		} else {
+			*out = t // update if success
+			return true
+		}
+	}
+	return false
 }
