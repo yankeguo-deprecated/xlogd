@@ -1,9 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
+)
+
+const (
+	eventProjectJSON = "_json_"
 )
 
 var (
@@ -35,6 +40,12 @@ func (b Event) ToRecord() (r Record, ok bool) {
 	// decode source field
 	if ok = decodeBeatSource(b.Source, &r); !ok {
 		return
+	}
+	// decode extra if event.project == _json_
+	if r.Project == eventProjectJSON {
+		if ok = decodeExtra(&r); !ok {
+			return
+		}
 	}
 	return
 }
@@ -77,5 +88,41 @@ func decodeBeatSource(raw string, r *Record) bool {
 	if ss = strings.Split(r.Project, "."); len(ss) > 0 {
 		r.Project = ss[0]
 	}
+	return true
+}
+
+func decodeExtra(r *Record) bool {
+	var err error
+	r.Extra = map[string]interface{}{}
+	if err = json.Unmarshal([]byte(r.Message), &r.Extra); err != nil {
+		return false
+	}
+	// extract topic field
+	if topic, ok := r.Extra["topic"].(string); ok {
+		r.Topic = topic
+		delete(r.Extra, "topic")
+	} else {
+		// fail if topic is not set
+		return false
+	}
+	// extract project field, override Record if existed
+	if project, ok := r.Extra["project"].(string); ok {
+		r.Project = project
+		delete(r.Extra, "project")
+	}
+	// extract crid field, override Record if existed
+	if crid, ok := r.Extra["crid"].(string); ok {
+		r.Crid = crid
+		delete(r.Extra, "crid")
+	}
+	// extract timestamp field, override Record if existed
+	if timestampStr, ok := r.Extra["timestamp"].(string); ok {
+		if r.Timestamp, err = time.Parse(time.RFC3339, timestampStr); err != nil {
+			return false
+		}
+		delete(r.Extra, "timestamp")
+	}
+	// clear the message
+	r.Message = ""
 	return true
 }
