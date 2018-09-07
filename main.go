@@ -192,7 +192,7 @@ func outputRoutine() {
 
 		// insert records to elasticsearch
 		for _, r := range rs {
-			br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r)
+			br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
 			verbose("OUTPUT: new bulk index request", br.String())
 			bs = bs.Add(br)
 		}

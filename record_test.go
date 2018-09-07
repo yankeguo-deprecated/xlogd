@@ -14,3 +14,10 @@ func TestRecord_Index(t *testing.T) {
 		t.Error("failed, got", r.Index())
 	}
 }
+
+func TestRecord_Map(t *testing.T) {
+	r := Record{Extra: map[string]interface{}{
+		"duration": 20,
+	}}
+	t.Log(r.Map())
+}
