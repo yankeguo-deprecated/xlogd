@@ -3,13 +3,21 @@ package main
 import (
 	"encoding/json"
 	"github.com/go-redis/redis"
+	"os"
 	"time"
 )
 
+var hostname string
+
+func init() {
+	hostname, _ = os.Hostname()
+}
+
 // Redis wrapper for redis.Client
 type Redis struct {
-	Client *redis.Client
-	Key    string
+	Client     *redis.Client
+	Key        string
+	LastStated time.Time
 }
 
 // DialRedis create wrapper for redis.Client and ping
@@ -53,6 +61,27 @@ func (r *Redis) NextEvent() (e Event, ok bool, err error) {
 	}
 	// no error, retrieved
 	ok = true
+	return
+}
+
+// QueueDepth current queue depth
+func (r *Redis) QueueDepth() int64 {
+	return r.Client.LLen(r.Key).Val()
+}
+
+func (r *Redis) Stats() (rs RedisStats, ok bool) {
+	ls := time.Now().Round(time.Minute)
+	if ls.Equal(r.LastStated) {
+		return
+	}
+	rs = RedisStats{
+		Timestamp: time.Now(),
+		Host:      r.Client.Options().Addr,
+		Hostname:  hostname,
+		Depth:     r.QueueDepth(),
+	}
+	ok = true
+	r.LastStated = ls
 	return
 }
 

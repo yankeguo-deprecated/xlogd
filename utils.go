@@ -2,53 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"regexp"
 	"strings"
 	"time"
 )
-
-const (
-	eventTopicJSON = "_json_"
-)
-
-var (
-	eventTimestampLayout = "2006/01/02 15:04:05.000"
-	eventLinePattern     = regexp.MustCompile(`^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]`)
-	eventCridPattern     = regexp.MustCompile(`CRID\[([0-9a-zA-Z\-]+)\]`)
-)
-
-// Beat beat info field
-type Beat struct {
-	Hostname string `json:"hostname"` // hostname
-}
-
-// Event a single event in redis LIST sent by filebeat
-type Event struct {
-	Beat    Beat   `json:"beat"`    // contains hostname
-	Message string `json:"message"` // contains timestamp, crid
-	Source  string `json:"source"`  // contains env, topic, project
-}
-
-// ToRecord implements RecordConvertible
-func (b Event) ToRecord() (r Record, ok bool) {
-	// assign hostname
-	r.Hostname = b.Beat.Hostname
-	// decode message field
-	if ok = decodeBeatMessage(b.Message, &r); !ok {
-		return
-	}
-	// decode source field
-	if ok = decodeBeatSource(b.Source, &r); !ok {
-		return
-	}
-	// decode extra if event.topic == _json_
-	if r.Topic == eventTopicJSON {
-		if ok = decodeExtra(&r); !ok {
-			return
-		}
-	}
-	return
-}
 
 func decodeBeatMessage(raw string, r *Record) bool {
 	var err error
@@ -91,7 +47,7 @@ func decodeBeatSource(raw string, r *Record) bool {
 	return true
 }
 
-func decodeExtra(r *Record) bool {
+func mergeRecordExtra(r *Record) bool {
 	var err error
 	r.Extra = map[string]interface{}{}
 	if err = json.Unmarshal([]byte(r.Message), &r.Extra); err != nil {

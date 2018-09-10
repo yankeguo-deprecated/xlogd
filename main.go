@@ -19,6 +19,7 @@ var (
 	verboseMode = false
 
 	recordsChan chan Record
+	statsChan   chan RedisStats
 	esClient    *elastic.Client
 
 	inputExiting  = false
@@ -55,8 +56,14 @@ func main() {
 	// allocate records chan
 	recordsChan = make(chan Record, options.Batch.Size*2*len(options.Redis.URLs))
 
+	// allocate stats chan
+	statsChan = make(chan RedisStats, len(options.Redis.URLs)*20)
+
 	// output routines
 	go outputRoutine()
+
+	// stats output routines
+	go statsRoutine()
 
 	// input routines
 	for i := range options.Redis.URLs {
@@ -115,6 +122,10 @@ func unsafeInputRoutine(idx int) (err error) {
 		ok bool
 	)
 	for {
+		// stats
+		if rs, ok := rd.Stats(); ok {
+			statsChan <- rs
+		}
 		// check shutdown mark
 		if inputExiting {
 			verbose(" INPUT: exiting due to shutdown mark", idx)
@@ -142,6 +153,19 @@ func unsafeInputRoutine(idx int) (err error) {
 		verbose(" INPUT: record queued", idx, r)
 	}
 	return
+}
+
+func statsRoutine() {
+	// logging
+	log.Println(" STATS: running")
+	// loop
+	for {
+		r := <-statsChan
+		verbose(" STATS: will insert:", r)
+		if _, err := esClient.Index().Index(r.Index()).Type("_doc").BodyJson(&r).Do(context.Background()); err != nil {
+			verbose(" STATS: failed to insert:", err)
+		}
+	}
 }
 
 func outputRoutine() {
