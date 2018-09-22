@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -24,10 +25,13 @@ var (
 	server *redcon.Server
 	client *elastic.Client
 
-	records chan Record
+	records    chan Record
+	totalCount uint64
 
 	shutdown      bool
 	shutdownGroup = &sync.WaitGroup{}
+
+	hostname string
 )
 
 func acceptHandlerFunc(conn redcon.Conn) bool {
@@ -54,7 +58,7 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteString("OK")
 		conn.Close()
 	case "info":
-		// declare redis 2.4+, supports multiple value in RPUSH/LPUSH
+		// declare as redis 2.4+, supports multiple values in RPUSH/LPUSH
 		conn.WriteString("redis_version:2.4")
 	case "rpush", "lpush":
 		// at least 3 arguments, RPUSH xlog "{....}"
@@ -128,8 +132,9 @@ func outputRoutine() {
 
 		// insert records to elasticsearch
 		for _, r := range rs {
+			atomic.AddUint64(&totalCount, 1)
 			br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
-			log.Debug().Msg("bulk request:\n" + br.String())
+			log.Debug().Msg("new bulk request:\n" + br.String())
 			bs = bs.Add(br)
 		}
 
@@ -144,6 +149,32 @@ func outputRoutine() {
 	}
 }
 
+func statsRoutine() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for {
+		// record current totalCount
+		count := totalCount
+		// wait for next tick
+		<-ticker.C
+		// create stats
+		r := Stats{
+			Timestamp:     time.Now(),
+			Hostname:      hostname,
+			RecordsTotal:  totalCount,
+			Records1M:     totalCount - count,
+			RecordsQueued: uint64(len(records)),
+		}
+		// insert stats
+		if _, err := client.Index().Index(r.Index()).Type("_doc").BodyJson(&r).Do(context.Background()); err != nil {
+			log.Error().Err(err).Msg("failed to write stats")
+		} else {
+			log.Debug().Interface("stats", &r).Msg("stats written")
+		}
+	}
+}
+
 func waitForSignal() {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
@@ -153,6 +184,9 @@ func waitForSignal() {
 
 func main() {
 	var err error
+
+	// collect hostname
+	hostname, _ = os.Hostname()
 
 	// init logger
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
@@ -207,6 +241,9 @@ func main() {
 
 	// start outputRoutine
 	go outputRoutine()
+
+	// start statsRoutine
+	go statsRoutine()
 
 	// wait for SIGINT or SIGTERM
 	waitForSignal()

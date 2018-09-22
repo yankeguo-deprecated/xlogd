@@ -5,7 +5,6 @@ import (
 	"github.com/go-yaml/yaml"
 	"github.com/pkg/errors"
 	"io/ioutil"
-	"regexp"
 	"time"
 )
 
@@ -13,33 +12,26 @@ const (
 	eventTopicJSON = "_json_"
 )
 
-var (
-	eventTimestampLayout = "2006/01/02 15:04:05.000"
-	eventLinePattern     = regexp.MustCompile(`^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]`)
-	eventCridPattern     = regexp.MustCompile(`CRID\[([0-9a-zA-Z\-]+)\]`)
-)
-
-type DaemonStats struct {
-	Timestamp time.Time `json:"timestamp"`
-	Hostname  string    `json:"hostname"`
-	Depth     int64     `json:"depth"`
+// Stats daemon stats record
+type Stats struct {
+	Timestamp     time.Time
+	Hostname      string `json:"hostname"`
+	RecordsQueued uint64 `json:"records_queued"`
+	RecordsTotal  uint64 `json:"records_total"`
+	Records1M     uint64 `json:"records_1m"`
 }
 
-// Index index for record in elasticsearch
-func (r DaemonStats) Index() string {
-	return fmt.Sprintf("x-xlogd-stats-%04d-%02d-%02d", r.Timestamp.Year(), r.Timestamp.Month(), r.Timestamp.Day())
-}
-
-// EventBeat beat info field
-type EventBeat struct {
-	Hostname string `json:"hostname"` // hostname
+func (r Stats) Index() string {
+	return fmt.Sprintf("x-xlogd-%04d-%02d-%02d", r.Timestamp.Year(), r.Timestamp.Month(), r.Timestamp.Day())
 }
 
 // Event a single event in redis LIST sent by filebeat
 type Event struct {
-	Beat    EventBeat `json:"beat"`    // contains hostname
-	Message string    `json:"message"` // contains timestamp, crid
-	Source  string    `json:"source"`  // contains env, topic, project
+	Beat struct {
+		Hostname string `json:"hostname"`
+	} `json:"beat"` // contains hostname
+	Message string `json:"message"` // contains timestamp, crid
+	Source  string `json:"source"`  // contains env, topic, project
 }
 
 // ToRecord implements RecordConvertible

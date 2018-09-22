@@ -1,5 +1,4 @@
 time_offset: -8
-dev: true
 bind: 127.0.0.1:9966
 elasticsearch:
   batch:

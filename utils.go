@@ -2,8 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"time"
+)
+
+var (
+	eventTimestampLayout = "2006/01/02 15:04:05.000"
+	eventLinePattern     = regexp.MustCompile(`^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]`)
+	eventCridPattern     = regexp.MustCompile(`CRID\[([0-9a-zA-Z\-]+)\]`)
 )
 
 func decodeBeatMessage(raw string, r *Record) bool {
