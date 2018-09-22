@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"github.com/olivere/elastic"
-	"log"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/tidwall/redcon"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -15,191 +19,100 @@ import (
 var (
 	optionsFile string
 	options     Options
+	dev         bool
 
-	verboseMode = false
+	server *redcon.Server
+	client *elastic.Client
 
-	recordsChan chan Record
-	statsChan   chan RedisStats
-	esClient    *elastic.Client
+	records chan Record
 
-	inputExiting  = false
-	inputGroup    = &sync.WaitGroup{}
-	outputExiting = false
-	outputGroup   = &sync.WaitGroup{}
+	shutdown      bool
+	shutdownGroup = &sync.WaitGroup{}
 )
 
-func verbose(s ...interface{}) {
-	if verboseMode {
-		log.Println(s...)
-	}
+func acceptHandlerFunc(conn redcon.Conn) bool {
+	log.Info().Str("addr", conn.RemoteAddr()).Msg("connection established")
+	return true
 }
 
-func main() {
-	var err error
-
-	// parse flag for options file and dummy mode
-	flag.StringVar(&optionsFile, "c", "/etc/xlogd.yml", "config file")
-	flag.BoolVar(&verboseMode, "verbose", false, "enable verbose mode, print extra logs")
-	flag.Parse()
-
-	// load options
-	if options, err = LoadOptions(optionsFile); err != nil {
-		panic(err)
-	}
-
-	// create elasticsearch client
-	if esClient, err = elastic.NewClient(elastic.SetURL(options.Elasticsearch.URLs...)); err != nil {
-		panic(err)
+func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
+	// empty arguments, not possible
+	if len(cmd.Args) == 0 {
+		conn.WriteError("ERR bad command")
 		return
 	}
-
-	// allocate records chan
-	recordsChan = make(chan Record, options.Batch.Size*2*len(options.Redis.URLs))
-
-	// allocate stats chan
-	statsChan = make(chan RedisStats, len(options.Redis.URLs)*20)
-
-	// output routines
-	go outputRoutine()
-
-	// stats output routines
-	go statsRoutine()
-
-	// input routines
-	for i := range options.Redis.URLs {
-		go inputRoutine(i)
-	}
-
-	// wait for SIGINT or SIGTERM
-	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
-	<-shutdown
-
-	// wait for all goroutines complete
-	log.Println("SIGNAL: exiting...")
-
-	// stop all inputs
-	inputExiting = true
-	inputGroup.Wait()
-
-	// stop output
-	outputExiting = true
-	outputGroup.Wait()
-}
-
-func inputRoutine(idx int) {
-	for {
-		// call unsafe input routine
-		if err := unsafeInputRoutine(idx); err != nil {
-			log.Println(" INPUT: routine failed", idx, err)
-		}
-		// check shutdown mark
-		if inputExiting {
+	// extract command
+	command := strings.ToLower(string(cmd.Args[0]))
+	log.Debug().Str("addr", conn.RemoteAddr()).Str("cmd", command).Int("args", len(cmd.Args)-1).Msg("new command")
+	// handle command
+	switch command {
+	default:
+		conn.WriteError("ERR unknown command '" + command + "'")
+	case "ping":
+		conn.WriteString("PONG")
+	case "quit":
+		conn.WriteString("OK")
+		conn.Close()
+	case "info":
+		// declare redis 2.4+, supports multiple value in RPUSH/LPUSH
+		conn.WriteString("redis_version:2.4")
+	case "rpush", "lpush":
+		// at least 3 arguments, RPUSH xlog "{....}"
+		if len(cmd.Args) < 3 {
+			conn.WriteError("ERR bad command '" + command + "'")
 			return
 		}
-		// sleep 3 seconds and retry
-		time.Sleep(time.Second * 3)
+		// retrieve all events
+		for _, raw := range cmd.Args[2:] {
+			// unmarshal event
+			var event Event
+			if err := json.Unmarshal(raw, &event); err != nil {
+				log.Debug().Err(err).Str("event", string(raw)).Msg("failed to unmarshal event")
+				continue
+			}
+			// convert to record
+			if record, ok := event.ToRecord(); ok {
+				records <- record
+			} else {
+				log.Debug().Str("event", string(raw)).Msg("failed to convert record")
+			}
+		}
+		conn.WriteInt(len(records))
+	case "llen":
+		conn.WriteInt(len(records))
 	}
 }
 
-func unsafeInputRoutine(idx int) (err error) {
-	// manage inputGroup
-	inputGroup.Add(1)
-	defer inputGroup.Done()
-	// logging
-	log.Println(" INPUT: routine created", idx)
-	defer log.Println(" INPUT: routine exited", idx)
-	// create redis client
-	var rd *Redis
-	if rd, err = DialRedis(options.Redis.URLs[idx], options.Redis.Key); err != nil {
-		return
-	}
-	defer rd.Close()
-	// BLPOP loop
-	var (
-		e  Event
-		r  Record
-		ok bool
-	)
-	for {
-		// stats
-		if rs, ok := rd.Stats(); ok {
-			statsChan <- rs
-		}
-		// check shutdown mark
-		if inputExiting {
-			verbose(" INPUT: exiting due to shutdown mark", idx)
-			return
-		}
-		// next event
-		if e, ok, err = rd.NextEvent(); err != nil {
-			verbose(" INPUT: exiting due to error", idx, err)
-			return
-		} else if !ok {
-			verbose(" INPUT: not retrieved", idx)
-			continue
-		}
-		// convert to record
-		if r, ok = e.ToRecord(); !ok {
-			verbose(" INPUT: conversion failed", idx)
-			continue
-		}
-		// fix time if needed
-		if !r.NoTimeOffset {
-			r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
-		}
-		// append to channel
-		recordsChan <- r
-		verbose(" INPUT: record queued", idx, r)
-	}
-	return
-}
-
-func statsRoutine() {
-	// logging
-	log.Println(" STATS: running")
-	// loop
-	for {
-		r := <-statsChan
-		verbose(" STATS: will insert:", r)
-		if _, err := esClient.Index().Index(r.Index()).Type("_doc").BodyJson(&r).Do(context.Background()); err != nil {
-			verbose(" STATS: failed to insert:", err)
-		}
-	}
+func closedHandlerFunc(conn redcon.Conn, err error) {
+	log.Info().Err(err).Str("addr", conn.RemoteAddr()).Msg("connection closed")
 }
 
 func outputRoutine() {
-	// manage inputGroup
-	outputGroup.Add(1)
-	defer outputGroup.Done()
-	// logging
-	log.Println("OUTPUT: running")
-	defer log.Println("OUTPUT: exiting")
+	shutdownGroup.Add(1)
+	defer shutdownGroup.Done()
 
 	// temporary slice of records
-	rs := make([]Record, 0, options.Batch.Size)
+	rs := make([]Record, 0, options.Elasticsearch.Batch.Size)
 
 	for {
 		// check for the outputExiting
-		if outputExiting && len(recordsChan) == 0 {
-			verbose("OUTPUT: exiting due to shutdown mark")
+		if shutdown && len(records) == 0 {
 			break
 		}
 
 		// collect batch of records or wait for timeouts
-		tm := time.NewTimer(time.Second * time.Duration(options.Batch.Timeout))
+		tm := time.NewTimer(time.Second * time.Duration(options.Elasticsearch.Batch.Timeout))
 	loop:
 		for {
 			select {
-			case r := <-recordsChan:
-				verbose("OUTPUT: record retrieved")
+			case r := <-records:
 				rs = append(rs, r)
-				if len(rs) >= options.Batch.Size {
-					verbose("OUTPUT: temporary slice fulled")
+				if len(rs) >= options.Elasticsearch.Batch.Size {
+					log.Debug().Msg("batch full")
 					break loop
 				}
 			case <-tm.C:
-				verbose("OUTPUT: idle timed out")
+				log.Debug().Msg("batch timed out")
 				break loop
 			}
 		}
@@ -207,27 +120,103 @@ func outputRoutine() {
 
 		// continue if no records
 		if len(rs) == 0 {
-			verbose("OUTPUT: empty temporary slice")
 			continue
 		}
 
 		// create bulk
-		bs := esClient.Bulk()
+		bs := client.Bulk()
 
 		// insert records to elasticsearch
 		for _, r := range rs {
 			br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
-			verbose("OUTPUT: new bulk index request", br.String())
+			log.Debug().Msg("bulk request:\n" + br.String())
 			bs = bs.Add(br)
 		}
 
 		// do the bulk operation
 		if _, err := bs.Do(context.Background()); err != nil {
-			log.Println("OUTPUT: failed to bulk insert", err)
+			log.Info().Err(err).Msg("failed to bulk insert")
 		}
-		verbose("OUTPUT: bulk committed")
+		log.Debug().Msg("bulk committed")
 
 		// clear rs for reuse
 		rs = rs[:0]
 	}
+}
+
+func waitForSignal() {
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-shutdown
+	log.Info().Str("signal", sig.String()).Msg("signal caught")
+}
+
+func main() {
+	var err error
+
+	// init logger
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: true})
+
+	// decode command line arguments
+	flag.StringVar(&optionsFile, "c", "/etc/xlogd.yml", "config file")
+	flag.BoolVar(&dev, "dev", false, "enable dev mode")
+	flag.Parse()
+
+	// load options
+	log.Info().Str("file", optionsFile).Msg("load options file")
+	if options, err = LoadOptions(optionsFile); err != nil {
+		log.Error().Err(err).Msg("failed to load options file")
+		os.Exit(1)
+		return
+	}
+
+	// set dev from command line arguments
+	if dev {
+		options.Dev = true
+	}
+
+	// re-init logger
+	if options.Dev {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+	}
+
+	// create elasticsearch client
+	if client, err = elastic.NewClient(elastic.SetURL(options.Elasticsearch.URLs...)); err != nil {
+		log.Error().Err(err).Msg("failed to create elasticsearch client")
+		os.Exit(1)
+		return
+	}
+
+	// allocate records chan
+	records = make(chan Record, options.Capacity)
+
+	// create server
+	server = redcon.NewServer(options.Bind, commandHandlerFunc, acceptHandlerFunc, closedHandlerFunc)
+
+	// start the server
+	setup := make(chan error, 1)
+	go server.ListenServeAndSignal(setup)
+	if err = <-setup; err != nil {
+		log.Error().Err(err).Msg("failed to start server")
+		os.Exit(1)
+		return
+	}
+	log.Info().Str("bind", options.Bind).Msg("server started")
+
+	// start outputRoutine
+	go outputRoutine()
+
+	// wait for SIGINT or SIGTERM
+	waitForSignal()
+
+	// close the server
+	err = server.Close()
+	log.Info().Str("bind", options.Bind).Err(err).Msg("server closed")
+
+	// mark to shutdown and wait for output complete
+	shutdown = true
+	shutdownGroup.Wait()
+	log.Info().Msg("output queue drained, exiting")
 }

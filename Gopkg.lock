@@ -2,23 +2,6 @@
 
 
 [[projects]]
-  digest = "1:ad9585b1b4361cbe8e7d8cc31af82ef5f597b9243909daa16f2c225b8af68c46"
-  name = "github.com/go-redis/redis"
-  packages = [
-    ".",
-    "internal",
-    "internal/consistenthash",
-    "internal/hashtag",
-    "internal/pool",
-    "internal/proto",
-    "internal/singleflight",
-    "internal/util",
-  ]
-  pruneopts = "UT"
-  revision = "1614e579ed966441b8e0c3ccea1dd0fbbd93a6ae"
-  version = "v6.14.0"
-
-[[projects]]
   digest = "1:342378ac4dcb378a5448dd723f0784ae519383532f5e70ade24132c4c8693202"
   name = "github.com/go-yaml/yaml"
   packages = ["."]
@@ -40,7 +23,7 @@
   revision = "60711f1a8329503b04e1c88535f419d0bb440bff"
 
 [[projects]]
-  digest = "1:0cd542ce1c152ba310f44b8b8d3908b6a2aa611bfb37d9b6139f84f21cabed80"
+  digest = "1:605ac81d35c5ce7c33b6937ca081cd5ebd6a3051867b32afa08883af5113ce69"
   name = "github.com/olivere/elastic"
   packages = [
     ".",
@@ -48,8 +31,8 @@
     "uritemplates",
   ]
   pruneopts = "UT"
-  revision = "4dc1ca747c59b18d2d1edf8108b6d359f90cf607"
-  version = "v6.1.29"
+  revision = "7c7a23ca147ace22f386500828b95e9cb226f87f"
+  version = "v6.2.6"
 
 [[projects]]
   digest = "1:40e195917a951a8bf867cd05de2a46aaf1806c50cf92eebf4c16f78cd196f747"
@@ -59,14 +42,37 @@
   revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
   version = "v0.8.0"
 
+[[projects]]
+  digest = "1:6342a41a66687c0d0eb1f4d946447bfb808c5136adeb92903ed07972071e19ac"
+  name = "github.com/rs/zerolog"
+  packages = [
+    ".",
+    "internal/cbor",
+    "internal/json",
+    "log",
+  ]
+  pruneopts = "UT"
+  revision = "338f9bc14084d22cb8eeacd6492861f8449d715c"
+  version = "v1.9.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:b71eb6ea46bd52fc536b9b88ea26aa88d23d0af779b40515433643ecd9c5940b"
+  name = "github.com/tidwall/redcon"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "56b016127ae730019c5e3073a413ad9526440c38"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/go-redis/redis",
     "github.com/go-yaml/yaml",
     "github.com/olivere/elastic",
     "github.com/pkg/errors",
+    "github.com/rs/zerolog",
+    "github.com/rs/zerolog/log",
+    "github.com/tidwall/redcon",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
