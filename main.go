@@ -132,9 +132,16 @@ func outputRoutine() {
 
 		// insert records to elasticsearch
 		for _, r := range rs {
+			// increase total count
 			atomic.AddUint64(&totalCount, 1)
+			// fix time offset if needed
+			if !r.NoTimeOffset {
+				r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
+			}
+			// create request
 			br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
 			log.Debug().Msg("new bulk request:\n" + br.String())
+			// append request to bulk
 			bs = bs.Add(br)
 		}
 

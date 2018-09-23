@@ -11,7 +11,17 @@ var (
 	eventTimestampLayout = "2006/01/02 15:04:05.000"
 	eventLinePattern     = regexp.MustCompile(`^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]`)
 	eventCridPattern     = regexp.MustCompile(`CRID\[([0-9a-zA-Z\-]+)\]`)
+	eventKeywordPattern  = regexp.MustCompile(`KEYWORD\[([^\]]+)\]`)
 )
+
+func extractKeyword(message string) string {
+	matches := eventKeywordPattern.FindAllStringSubmatch(message, -1)
+	out := make([]string, 0, len(matches))
+	for _, sub := range matches {
+		out = append(out, sub[1])
+	}
+	return strings.Join(out, ",")
+}
 
 func decodeBeatMessage(raw string, r *Record) bool {
 	var err error
@@ -34,6 +44,8 @@ func decodeBeatMessage(raw string, r *Record) bool {
 	} else {
 		r.Crid = "-"
 	}
+	// find keyword
+	r.Keyword = extractKeyword(raw)
 	return true
 }
 

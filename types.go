@@ -64,6 +64,7 @@ type Record struct {
 	Topic     string                 `json:"topic"`             // topic of log, for example 'access', 'err'
 	Crid      string                 `json:"crid"`              // correlation id
 	Message   string                 `json:"message,omitempty"` // the actual log message body
+	Keyword   string                 `json:"keyword"`           // comma separated keywords
 	Extra     map[string]interface{} `json:"extra,omitempty"`   // extra structured data
 
 	NoTimeOffset bool `json:"-"` // should skip timestamp offset
@@ -82,6 +83,7 @@ func (r Record) Map() (out map[string]interface{}) {
 	out["project"] = r.Project
 	out["topic"] = r.Topic
 	out["crid"] = r.Crid
+	out["keyword"] = r.Keyword
 	if len(r.Message) > 0 {
 		out["message"] = r.Message
 	}
