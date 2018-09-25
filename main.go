@@ -39,6 +39,13 @@ func acceptHandlerFunc(conn redcon.Conn) bool {
 	return true
 }
 
+func checkRecordKeyword(r Record) bool {
+	if strSliceContains(options.EnforceKeyword, r.Topic) && len(r.Keyword) == 0 {
+		return false
+	}
+	return true
+}
+
 func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 	// empty arguments, not possible
 	if len(cmd.Args) == 0 {
@@ -76,7 +83,11 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 			}
 			// convert to record
 			if record, ok := event.ToRecord(); ok {
-				records <- record
+				// check should keyword be enforced
+				if checkRecordKeyword(record) {
+					// insert into channel
+					records <- record
+				}
 			} else {
 				log.Debug().Str("event", string(raw)).Msg("failed to convert record")
 			}

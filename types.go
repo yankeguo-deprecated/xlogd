@@ -113,6 +113,9 @@ type Options struct {
 	// generally timezone information is missing from log files, you may need set a offset to fix it
 	// for 'Asia/Shanghai', set TimeOffset to -8
 	TimeOffset int `yaml:"time_offset"`
+	// EnforceKeyword
+	// topic should be keyword enforced
+	EnforceKeyword []string `yaml:"enforce_keyword"`
 }
 
 // ElasticsearchOptions options for ElasticSearch
