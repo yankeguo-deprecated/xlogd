@@ -7,12 +7,16 @@ func TestExtractKeyword(t *testing.T) {
 	if out != "hello,_world" {
 		t.Fatal("failed 1")
 	}
-	out = extractKeyword("hello world KEYWORD[hello,_world] dust hello KEYWORD[dust,hello]")
+	out = extractKeyword("hello world KEYWORD[hello,_world] dust hello K[dust,hello]")
 	if out != "hello,_world,dust,hello" {
 		t.Fatal("failed 2")
 	}
-	out = extractKeyword("KEYWORD[dust,world] hello world KEYWORD[hello,_world] dust hello KEYWORD[dust,hello]")
+	out = extractKeyword("KEYWORD[dust,world] hello world KEYWORD[hello,_world] dust hello KW[dust,hello]")
 	if out != "dust,world,hello,_world,dust,hello" {
+		t.Fatal("failed 2")
+	}
+	out = extractKeyword("KEYWORD[dust,world] hello world KEYWORD[hello,_world] dust helloKW[dust,hello]")
+	if out != "dust,world,hello,_world" {
 		t.Fatal("failed 2")
 	}
 }
