@@ -63,6 +63,14 @@
   pruneopts = "UT"
   revision = "56b016127ae730019c5e3073a413ad9526440c38"
 
+[[projects]]
+  branch = "master"
+  digest = "1:7d0567633cc43c6981b87317a813c944f34b8f89dfddaf0844f8dd1c5e9aa328"
+  name = "github.com/yankeguo/byteline"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a291935bab7a2581d11f04d536b36576bce2d760"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -73,6 +81,7 @@
     "github.com/rs/zerolog",
     "github.com/rs/zerolog/log",
     "github.com/tidwall/redcon",
+    "github.com/yankeguo/byteline",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

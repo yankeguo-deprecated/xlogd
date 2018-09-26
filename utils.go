@@ -1,52 +1,75 @@
 package main
 
 import (
-	"encoding/json"
-	"regexp"
+	"github.com/yankeguo/byteline"
 	"strings"
 	"time"
 )
 
-var (
-	eventTimestampLayout = "2006/01/02 15:04:05.000"
-	eventLinePattern     = regexp.MustCompile(`^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]`)
-	eventCridPattern     = regexp.MustCompile(`CRID\[([0-9a-zA-Z\-]+)\]`)
-	eventKeywordPattern  = regexp.MustCompile(`(^|\s+)(KEYWORD|K|KW)\[([^\]]+)\]`)
-)
-
-func extractKeyword(message string) string {
-	matches := eventKeywordPattern.FindAllStringSubmatch(message, -1)
-	out := make([]string, 0, len(matches))
-	for _, sub := range matches {
-		out = append(out, sub[3])
+func decodeBeatMessage(raw string, isJSON bool, r *Record) (ok bool) {
+	var yyyy, MM, dd, hh, mm, ss, SSS int64
+	buf := []byte(raw)
+	if buf, _, ok = byteline.Run(
+		buf,
+		byteline.TrimOperation{Left: true, Right: true},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{'['}},
+		byteline.NumberOperation{Remove: true, Len: 4, Base: 10, Out: &yyyy},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{'-', '/'}},
+		byteline.NumberOperation{Remove: true, Len: 2, Base: 10, Out: &MM},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{'-', '/'}},
+		byteline.NumberOperation{Remove: true, Len: 2, Base: 10, Out: &dd},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{' ', '\t'}},
+		byteline.NumberOperation{Remove: true, Len: 2, Base: 10, Out: &hh},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{':'}},
+		byteline.NumberOperation{Remove: true, Len: 2, Base: 10, Out: &mm},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{':'}},
+		byteline.NumberOperation{Remove: true, Len: 2, Base: 10, Out: &ss},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{'.'}},
+		byteline.NumberOperation{Remove: true, Len: 3, Base: 10, Out: &SSS},
+		byteline.RuneOperation{Remove: true, Allowed: []rune{']'}},
+	); !ok {
+		return
 	}
-	return strings.Join(out, ",")
-}
-
-func decodeBeatMessage(raw string, r *Record) bool {
-	var err error
-	var match []string
-	// trim message
-	raw = strings.TrimSpace(raw)
-	// search timestamp
-	if match = eventLinePattern.FindStringSubmatch(raw); len(match) != 2 {
-		return false
-	}
-	// parse timestamp
-	if r.Timestamp, err = time.Parse(eventTimestampLayout, match[1]); err != nil {
-		return false
-	}
-	// trim message
-	r.Message = strings.TrimSpace(raw[len(match[0]):])
-	// find crid
-	if match = eventCridPattern.FindStringSubmatch(r.Message); len(match) == 2 {
-		r.Crid = match[1]
+	// extract the timestamp
+	r.Timestamp = time.Date(int(yyyy), time.Month(MM), int(dd), int(hh), int(mm), int(ss), int(int64(time.Millisecond)*SSS), time.UTC)
+	// extract extra or CRID/K
+	if isJSON {
+		if buf, _, ok = byteline.Run(
+			buf,
+			byteline.TrimOperation{Left: true, Right: true},
+			byteline.JSONDecodeOperation{Remove: true, Out: &r.Extra},
+		); !ok {
+			return
+		}
+		// topic must exist
+		if !decodeExtraStr(r.Extra, "topic", &r.Topic) {
+			return false
+		}
+		// optional extra 'project', 'crid'
+		decodeExtraStr(r.Extra, "project", &r.Project)
+		decodeExtraStr(r.Extra, "crid", &r.Crid)
+		// optional extract 'timestamp'
+		if decodeExtraTime(r.Extra, "timestamp", &r.Timestamp) {
+			r.NoTimeOffset = true
+		}
+		// clear the message
+		r.Message = ""
 	} else {
-		r.Crid = "-"
+		if buf, _, ok = byteline.Run(
+			buf,
+			byteline.TrimOperation{Left: true, Right: true},
+			byteline.MarkDecodeOperation{Name: "CRID", Out: &r.Crid},
+			byteline.MarkDecodeOperation{Name: "K", Out: &r.Keyword, Combine: true, Separator: ","},
+			byteline.MarkDecodeOperation{Name: "KW", Out: &r.Keyword, Combine: true, Separator: ","},
+			byteline.MarkDecodeOperation{Name: "KEYWORD", Out: &r.Keyword, Combine: true, Separator: ","},
+			byteline.TrimOperation{Left: true, Right: true},
+		); !ok {
+			return
+		}
+		// assign the remaining message
+		r.Message = string(buf)
 	}
-	// find keyword
-	r.Keyword = extractKeyword(raw)
-	return true
+	return
 }
 
 func decodeBeatSource(raw string, r *Record) bool {
@@ -63,28 +86,6 @@ func decodeBeatSource(raw string, r *Record) bool {
 	if ss = strings.Split(r.Project, "."); len(ss) > 0 {
 		r.Project = ss[0]
 	}
-	return true
-}
-
-func decodeBeatJSONMessage(r *Record) bool {
-	var err error
-	r.Extra = map[string]interface{}{}
-	if err = json.Unmarshal([]byte(r.Message), &r.Extra); err != nil {
-		return false
-	}
-	// topic must exist
-	if !decodeExtraStr(r.Extra, "topic", &r.Topic) {
-		return false
-	}
-	// optional extra 'project', 'crid'
-	decodeExtraStr(r.Extra, "project", &r.Project)
-	decodeExtraStr(r.Extra, "crid", &r.Crid)
-	// optional extract 'timestamp'
-	if decodeExtraTime(r.Extra, "timestamp", &r.Timestamp) {
-		r.NoTimeOffset = true
-	}
-	// clear the message
-	r.Message = ""
 	return true
 }
 

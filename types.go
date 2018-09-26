@@ -29,7 +29,7 @@ func (r Stats) Index() string {
 type Event struct {
 	Beat struct {
 		Hostname string `json:"hostname"`
-	} `json:"beat"`                 // contains hostname
+	} `json:"beat"` // contains hostname
 	Message string `json:"message"` // contains timestamp, crid
 	Source  string `json:"source"`  // contains env, topic, project
 }
@@ -38,19 +38,13 @@ type Event struct {
 func (b Event) ToRecord() (r Record, ok bool) {
 	// assign hostname
 	r.Hostname = b.Beat.Hostname
-	// decode message field
-	if ok = decodeBeatMessage(b.Message, &r); !ok {
-		return
-	}
 	// decode source field
 	if ok = decodeBeatSource(b.Source, &r); !ok {
 		return
 	}
-	// decode extra if event.topic == _json_
-	if r.Topic == eventTopicJSON {
-		if ok = decodeBeatJSONMessage(&r); !ok {
-			return
-		}
+	// decode message field
+	if ok = decodeBeatMessage(b.Message, r.Topic == eventTopicJSON, &r); !ok {
+		return
 	}
 	return
 }
