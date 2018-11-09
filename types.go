@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-yaml/yaml"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"time"
+
+	"github.com/go-yaml/yaml"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -86,7 +87,7 @@ func (r Record) Map() (out map[string]interface{}) {
 
 // Index index for record in elasticsearch
 func (r Record) Index() string {
-	return fmt.Sprintf("%s-%04d-%02d-%02d", r.Topic, r.Timestamp.Year(), r.Timestamp.Month(), r.Timestamp.Day())
+	return fmt.Sprintf("%s-%s-%04d-%02d-%02d", r.Topic, r.Project, r.Timestamp.Year(), r.Timestamp.Month(), r.Timestamp.Day())
 }
 
 // Options options for xlogd
