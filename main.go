@@ -158,6 +158,7 @@ func outputRoutine() {
 
 		// do the bulk operation
 		if _, err := bs.Do(context.Background()); err != nil {
+			time.Sleep(500 * time.Millisecond)
 			log.Info().Err(err).Msg("failed to bulk insert")
 		}
 		log.Debug().Msg("bulk committed")
