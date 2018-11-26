@@ -4,10 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"github.com/olivere/elastic"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/tidwall/redcon"
 	"os"
 	"os/signal"
 	"strings"
@@ -15,6 +11,11 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/olivere/elastic"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/tidwall/redcon"
 )
 
 var (
@@ -75,6 +76,10 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 		}
 		// retrieve all events
 		for _, raw := range cmd.Args[2:] {
+			// ignore event > 1mb
+			if len(raw) > 1000000 {
+				continue
+			}
 			// unmarshal event
 			var event Event
 			if err := json.Unmarshal(raw, &event); err != nil {
