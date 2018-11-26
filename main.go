@@ -6,12 +6,14 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/juju/ratelimit"
 	"github.com/olivere/elastic"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -26,8 +28,12 @@ var (
 	server *redcon.Server
 	client *elastic.Client
 
-	records    chan Record
-	totalCount uint64
+	records       chan Record
+	limiter       *ratelimit.Bucket
+	totalConns    int64
+	connsSum      = map[string]int{}
+	connsSumMutex = &sync.Mutex{}
+	totalCount    int64
 
 	shutdown      bool
 	shutdownGroup = &sync.WaitGroup{}
@@ -35,8 +41,24 @@ var (
 	hostname string
 )
 
+func increaseConnsSum(addr string) int {
+	connsSumMutex.Lock()
+	defer connsSumMutex.Unlock()
+	i := extractIP(addr)
+	connsSum[i] = connsSum[i] + 1
+	return connsSum[i]
+}
+
+func decreaseConnsSum(addr string) int {
+	connsSumMutex.Lock()
+	defer connsSumMutex.Unlock()
+	i := extractIP(addr)
+	connsSum[i] = connsSum[i] - 1
+	return connsSum[i]
+}
+
 func acceptHandlerFunc(conn redcon.Conn) bool {
-	log.Info().Str("addr", conn.RemoteAddr()).Msg("connection established")
+	log.Info().Int64("conns", atomic.AddInt64(&totalConns, 1)).Int("conns-dup", increaseConnsSum(conn.RemoteAddr())).Str("addr", conn.RemoteAddr()).Msg("connection established")
 	return true
 }
 
@@ -45,6 +67,34 @@ func checkRecordKeyword(r Record) bool {
 		return false
 	}
 	return true
+}
+
+func consumeRawEvent(raw []byte) {
+	// ignore event > 1mb
+	if len(raw) > 1000000 {
+		return
+	}
+	// warn event > 500k
+	if len(raw) > 500000 {
+		log.Warn().Int("raw-length", len(raw)).Msg("raw message larger than 500k")
+	}
+	log.Debug().Int("raw-length", len(raw)).Msg("raw message")
+	// unmarshal event
+	var event Event
+	if err := json.Unmarshal(raw, &event); err != nil {
+		log.Debug().Err(err).Str("event", string(raw)).Msg("failed to unmarshal event")
+		return
+	}
+	// convert to record
+	if record, ok := event.ToRecord(); ok {
+		// check should keyword be enforced
+		if checkRecordKeyword(record) {
+			// insert into channel
+			records <- record
+		}
+	} else {
+		log.Debug().Str("event", string(raw)).Msg("failed to convert record")
+	}
 }
 
 func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
@@ -59,6 +109,7 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 	// handle command
 	switch command {
 	default:
+		log.Error().Str("command", command).Msg("unknown message")
 		conn.WriteError("ERR unknown command '" + command + "'")
 	case "ping":
 		conn.WriteString("PONG")
@@ -66,36 +117,28 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 		conn.WriteString("OK")
 		conn.Close()
 	case "info":
-		// declare as redis 2.4+, supports multiple values in RPUSH/LPUSH
-		conn.WriteString("redis_version:2.4")
+		if options.Multi {
+			// declare as redis 2.4+, supports multiple values in RPUSH/LPUSH
+			conn.WriteString("redis_version:2.4")
+		} else {
+			// declare as redis 2.4-, not support multiple values in RPUSH/LPUSH
+			conn.WriteString("redis_version:2.3")
+		}
 	case "rpush", "lpush":
 		// at least 3 arguments, RPUSH xlog "{....}"
 		if len(cmd.Args) < 3 {
 			conn.WriteError("ERR bad command '" + command + "'")
 			return
 		}
+		// return error if full
+		if len(records) >= options.Capacity {
+			time.Sleep(time.Second * 3)
+			conn.WriteError("ERR out of capacity")
+			return
+		}
 		// retrieve all events
 		for _, raw := range cmd.Args[2:] {
-			// ignore event > 1mb
-			if len(raw) > 1000000 {
-				continue
-			}
-			// unmarshal event
-			var event Event
-			if err := json.Unmarshal(raw, &event); err != nil {
-				log.Debug().Err(err).Str("event", string(raw)).Msg("failed to unmarshal event")
-				continue
-			}
-			// convert to record
-			if record, ok := event.ToRecord(); ok {
-				// check should keyword be enforced
-				if checkRecordKeyword(record) {
-					// insert into channel
-					records <- record
-				}
-			} else {
-				log.Debug().Str("event", string(raw)).Msg("failed to convert record")
-			}
+			consumeRawEvent(raw)
 		}
 		conn.WriteInt(len(records))
 	case "llen":
@@ -104,52 +147,50 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func closedHandlerFunc(conn redcon.Conn, err error) {
-	log.Info().Err(err).Str("addr", conn.RemoteAddr()).Msg("connection closed")
+	log.Info().Err(err).Int64("conns", atomic.AddInt64(&totalConns, -1)).Int("conns-dup", decreaseConnsSum(conn.RemoteAddr())).Str("addr", conn.RemoteAddr()).Msg("connection closed")
 }
 
 func outputRoutine() {
 	shutdownGroup.Add(1)
 	defer shutdownGroup.Done()
 
-	// temporary slice of records
-	rs := make([]Record, 0, options.Elasticsearch.Batch.Size)
-
 	for {
+		// force GC
+		runtime.GC()
+
 		// check for the outputExiting
 		if shutdown && len(records) == 0 {
 			break
 		}
 
-		// collect batch of records or wait for timeouts
-		tm := time.NewTimer(time.Second * time.Duration(options.Elasticsearch.Batch.Timeout))
-	loop:
-		for {
-			select {
-			case r := <-records:
-				rs = append(rs, r)
-				if len(rs) >= options.Elasticsearch.Batch.Size {
-					log.Debug().Msg("batch full")
-					break loop
-				}
-			case <-tm.C:
-				log.Debug().Msg("batch timed out")
-				break loop
-			}
-		}
-		tm.Stop()
+		// determine size
+		l := len(records)
 
-		// continue if no records
-		if len(rs) == 0 {
+		if l > options.Elasticsearch.Batch.Size {
+			// adjust size
+			l = options.Elasticsearch.Batch.Size
+		} else {
+			// wait for 100 msec, slow down loop
+			time.Sleep(time.Millisecond * 100)
+		}
+
+		// skip if no records
+		if l == 0 {
 			continue
 		}
+
+		// wait for the limiter, slow down loop
+		limiter.Wait(int64(l))
 
 		// create bulk
 		bs := client.Bulk()
 
-		// insert records to elasticsearch
-		for _, r := range rs {
+		// add bulk operation
+		for i := 0; i < l; i++ {
+			// take record
+			r := <-records
 			// increase total count
-			atomic.AddUint64(&totalCount, 1)
+			atomic.AddInt64(&totalCount, 1)
 			// fix time offset if needed
 			if !r.NoTimeOffset {
 				r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
@@ -167,9 +208,6 @@ func outputRoutine() {
 			log.Info().Err(err).Msg("failed to bulk insert")
 		}
 		log.Debug().Msg("bulk committed")
-
-		// clear rs for reuse
-		rs = rs[:0]
 	}
 }
 
@@ -188,13 +226,13 @@ func statsRoutine() {
 			Hostname:      hostname,
 			RecordsTotal:  totalCount,
 			Records1M:     totalCount - count,
-			RecordsQueued: uint64(len(records)),
+			RecordsQueued: int64(len(records)),
 		}
 		// insert stats
 		if _, err := client.Index().Index(r.Index()).Type("_doc").BodyJson(&r).Do(context.Background()); err != nil {
 			log.Error().Err(err).Msg("failed to write stats")
 		} else {
-			log.Debug().Interface("stats", &r).Msg("stats written")
+			log.Info().Interface("stats", &r).Msg("stats collected")
 		}
 	}
 }
@@ -249,6 +287,12 @@ func main() {
 
 	// allocate records chan
 	records = make(chan Record, options.Capacity)
+
+	// initialize limiter
+	limiter = ratelimit.NewBucket(
+		time.Second/time.Duration(options.Elasticsearch.Batch.Rate),
+		int64(options.Elasticsearch.Batch.Burst),
+	)
 
 	// create server
 	server = redcon.NewServer(options.Bind, commandHandlerFunc, acceptHandlerFunc, closedHandlerFunc)

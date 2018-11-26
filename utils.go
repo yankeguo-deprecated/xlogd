@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/yankeguo/byteline"
 	"strings"
 	"time"
+
+	"github.com/yankeguo/byteline"
 )
 
 func decodeBeatMessage(raw string, isJSON bool, r *Record) (ok bool) {
@@ -127,4 +128,15 @@ func strSliceContains(s []string, t string) bool {
 		}
 	}
 	return false
+}
+
+func extractIP(addr string) string {
+	c := strings.Split(addr, ":")
+	if len(c) < 2 {
+		return "UNKNOWN"
+	} else if len(c) == 2 {
+		return c[0]
+	} else {
+		return strings.Join(c[0:len(c)-1], ":")
+	}
 }

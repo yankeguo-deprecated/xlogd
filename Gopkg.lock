@@ -10,6 +10,14 @@
   version = "v2.2.1"
 
 [[projects]]
+  digest = "1:190ff84d9b2ed6589088f178cba8edb4b8ecb334df4572421fb016be1ac20463"
+  name = "github.com/juju/ratelimit"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "59fac5042749a5afb9af70e813da1dd5474f0167"
+  version = "1.0.1"
+
+[[projects]]
   branch = "master"
   digest = "1:aa3d8d42865c42626b5c1add193692d045b3188b1479f0a0a88690d21fe20083"
   name = "github.com/mailru/easyjson"
@@ -76,6 +84,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/go-yaml/yaml",
+    "github.com/juju/ratelimit",
     "github.com/olivere/elastic",
     "github.com/pkg/errors",
     "github.com/rs/zerolog",

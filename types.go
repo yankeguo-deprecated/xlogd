@@ -17,9 +17,9 @@ const (
 type Stats struct {
 	Timestamp     time.Time
 	Hostname      string `json:"hostname"`
-	RecordsQueued uint64 `json:"records_queued"`
-	RecordsTotal  uint64 `json:"records_total"`
-	Records1M     uint64 `json:"records_1m"`
+	RecordsQueued int64  `json:"records_queued"`
+	RecordsTotal  int64  `json:"records_total"`
+	Records1M     int64  `json:"records_1m"`
 }
 
 func (r Stats) Index() string {
@@ -98,6 +98,8 @@ type Options struct {
 	// Bind
 	// bind address for redis protocol
 	Bind string `yaml:"bind"`
+	// Multi
+	Multi bool `yaml:"multi"`
 	// Capacity
 	// capacity of the queue
 	Capacity int `yaml:"capacity"`
@@ -129,9 +131,12 @@ type BatchOptions struct {
 	// Size
 	// batch size
 	Size int `yaml:"size"`
-	// Timeout
-	// batch timeout
-	Timeout int `yaml:"timeout"`
+	// Rate
+	// rate per second reduce elasticsearch write
+	Rate int `yaml:"rate"`
+	// Burst
+	// burst capacity
+	Burst int `yaml:"burst"`
 }
 
 // LoadOptions load options from yaml file
@@ -150,7 +155,7 @@ func LoadOptions(filename string) (opt Options, err error) {
 	}
 	// check capacity
 	if opt.Capacity <= 0 {
-		opt.Capacity = 1024 * 100
+		opt.Capacity = 10000
 	}
 	// check elasticsearch urls
 	if len(opt.Elasticsearch.URLs) == 0 {
@@ -161,9 +166,13 @@ func LoadOptions(filename string) (opt Options, err error) {
 	if opt.Elasticsearch.Batch.Size <= 0 {
 		opt.Elasticsearch.Batch.Size = 100
 	}
-	// check batch timeout
-	if opt.Elasticsearch.Batch.Timeout <= 0 {
-		opt.Elasticsearch.Batch.Timeout = 10
+	// check batch limit
+	if opt.Elasticsearch.Batch.Rate <= 0 {
+		opt.Elasticsearch.Batch.Rate = 1000
+	}
+	// check batch burst
+	if opt.Elasticsearch.Batch.Burst <= 0 {
+		opt.Elasticsearch.Batch.Burst = 10000
 	}
 	return
 }

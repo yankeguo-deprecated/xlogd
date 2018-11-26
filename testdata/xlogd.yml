@@ -1,8 +1,11 @@
 time_offset: -8
+capacity: 2000
 bind: 127.0.0.1:9966
+multi: false
 elasticsearch:
   batch:
-    size: 10
-    timeout: 3
+    size: 2000
+    rate: 1000
+    burst: 10000
   urls:
     - http://127.0.0.1:9200
