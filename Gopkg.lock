@@ -23,7 +23,7 @@
   revision = "60711f1a8329503b04e1c88535f419d0bb440bff"
 
 [[projects]]
-  digest = "1:605ac81d35c5ce7c33b6937ca081cd5ebd6a3051867b32afa08883af5113ce69"
+  digest = "1:115948b36ea412cfbc289f7b911ea0b0f536917cbd499d9df6a3d3ab58e6edc0"
   name = "github.com/olivere/elastic"
   packages = [
     ".",
@@ -31,8 +31,8 @@
     "uritemplates",
   ]
   pruneopts = "UT"
-  revision = "7c7a23ca147ace22f386500828b95e9cb226f87f"
-  version = "v6.2.6"
+  revision = "0f13c62d4153081f2be7d0e136353b57dd3f1619"
+  version = "v6.2.13"
 
 [[projects]]
   digest = "1:40e195917a951a8bf867cd05de2a46aaf1806c50cf92eebf4c16f78cd196f747"
@@ -43,7 +43,7 @@
   version = "v0.8.0"
 
 [[projects]]
-  digest = "1:6342a41a66687c0d0eb1f4d946447bfb808c5136adeb92903ed07972071e19ac"
+  digest = "1:a073c2dd83aa92060bd5b551e3a19a40f8e24d4aaa7e7da767ee9c69f07b533a"
   name = "github.com/rs/zerolog"
   packages = [
     ".",
@@ -52,8 +52,8 @@
     "log",
   ]
   pruneopts = "UT"
-  revision = "338f9bc14084d22cb8eeacd6492861f8449d715c"
-  version = "v1.9.1"
+  revision = "8747b7b3a51b5d08ee7ac50eaf4869edaf9f714a"
+  version = "v1.11.0"
 
 [[projects]]
   branch = "master"
