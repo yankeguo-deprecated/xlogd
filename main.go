@@ -131,11 +131,13 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 			return
 		}
 		// return error if full
-		if len(records) >= options.Capacity {
-			time.Sleep(time.Second * 3)
-			conn.WriteError("ERR out of capacity")
-			return
-		}
+		/*
+			if len(records) >= options.Capacity {
+				time.Sleep(time.Second * 3)
+				conn.WriteError("ERR out of capacity")
+				return
+			}
+		*/
 		// retrieve all events
 		for _, raw := range cmd.Args[2:] {
 			consumeRawEvent(raw)
@@ -169,9 +171,6 @@ func outputRoutine() {
 		if l > options.Elasticsearch.Batch.Size {
 			// adjust size
 			l = options.Elasticsearch.Batch.Size
-		} else {
-			// wait for 100 msec, slow down loop
-			time.Sleep(time.Millisecond * 100)
 		}
 
 		// skip if no records
