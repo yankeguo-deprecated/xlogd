@@ -130,14 +130,6 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteError("ERR bad command '" + command + "'")
 			return
 		}
-		// return error if full
-		/*
-			if len(records) >= options.Capacity {
-				time.Sleep(time.Second * 3)
-				conn.WriteError("ERR out of capacity")
-				return
-			}
-		*/
 		// retrieve all events
 		for _, raw := range cmd.Args[2:] {
 			consumeRawEvent(raw)

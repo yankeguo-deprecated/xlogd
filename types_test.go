@@ -21,7 +21,7 @@ func TestRecord_Index(t *testing.T) {
 		Env:       "test",
 		Project:   "test-project",
 	}
-	if r.Index() != "dummy-topic-test-test-project-2018-04-11" {
+	if r.Index() != "dummy-topic-test-2018-04-11" {
 		t.Error("failed, got", r.Index())
 	}
 }
