@@ -25,3 +25,7 @@
 [[constraint]]
   name = "github.com/juju/ratelimit"
   version = "1.0.1"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/nsqio/go-diskqueue"

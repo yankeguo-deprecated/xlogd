@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/tidwall/redcon"
+	_ "github.com/nsqio/go-diskqueue"
 )
 
 var (
