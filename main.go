@@ -97,11 +97,15 @@ func consumeRawEvent(raw []byte) {
 	if record, ok := event.ToRecord(options.TimeOffset); ok {
 		// check should keyword be enforced
 		if checkRecordKeyword(record) {
+			// convert to operation
+			o := record.ToOperation()
+			// encode operation
 			var buf bytes.Buffer
-			encoder := gob.NewEncoder(&buf)
-			if err := encoder.Encode(record); err == nil {
-				queue.Put(buf.Bytes())
+			if err := gob.NewEncoder(&buf).Encode(o); err != nil {
+				log.Error().Err(err).Msg("failed to encode operation")
+				return
 			}
+			queue.Put(buf.Bytes())
 		}
 	} else {
 		log.Debug().Str("event", string(raw)).Msg("failed to convert record")
@@ -185,10 +189,9 @@ func outputRoutine() {
 			select {
 			case buf := <-records:
 				{
-					// decode record
-					var r Record
-					dec := gob.NewDecoder(bytes.NewReader(buf))
-					if err := dec.Decode(&r); err != nil {
+					// decode operation
+					var o Operation
+					if err := gob.NewDecoder(bytes.NewReader(buf)).Decode(&o); err != nil {
 						continue FOR_LOOP
 					}
 					// increase counter
@@ -196,7 +199,7 @@ func outputRoutine() {
 					// increase total counter
 					atomic.AddInt64(&totalCount, 1)
 					// create request
-					br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
+					br := elastic.NewBulkIndexRequest().Index(o.Index).Type("_doc").Doc(string(o.Body))
 					log.Debug().Msg("new bulk request:\n" + br.String())
 					// append request to bulk
 					bs = bs.Add(br)

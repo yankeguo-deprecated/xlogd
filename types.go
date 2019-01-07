@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"time"
@@ -90,6 +91,19 @@ func (r Record) Map() (out map[string]interface{}) {
 // Index index for record in elasticsearch
 func (r Record) Index() string {
 	return fmt.Sprintf("%s-%s-%04d-%02d-%02d", r.Topic, r.Env, r.Timestamp.Year(), r.Timestamp.Month(), r.Timestamp.Day())
+}
+
+// ToOperation convert record to operation
+func (r Record) ToOperation() (o Operation) {
+	o.Index = r.Index()
+	o.Body, _ = json.Marshal(r.Map())
+	return
+}
+
+// Operation marshalled record
+type Operation struct {
+	Index string `json:"index"`
+	Body  []byte `json:"body"`
 }
 
 // Options options for xlogd
