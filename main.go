@@ -358,5 +358,9 @@ func main() {
 	// mark to shutdown and wait for output complete
 	shutdown = true
 	shutdownGroup.Wait()
-	log.Info().Msg("output queue drained, exiting")
+	log.Info().Msg("output queue drained")
+
+	// close the queue
+	queue.Close()
+	log.Info().Msg("queue file closed, exiting")
 }
