@@ -37,19 +37,19 @@ func TestRecord_Map(t *testing.T) {
 
 func TestEvent_ToRecord(t *testing.T) {
 	var be Event
-	_, ok := be.ToRecord()
+	_, ok := be.ToRecord(0)
 	if ok {
 		t.Fatal("failed")
 	}
 	be.Message = "[2018/07/20 15:03:00.000] fakeK[fake] K[world] hello world CRID[aaa] KW[hello]"
-	_, ok = be.ToRecord()
+	_, ok = be.ToRecord(0)
 	if ok {
 		t.Fatal("failed")
 	}
 	be.Source = "/tmp/test2/test3/test1.20180719.log"
 	be.Beat.Hostname = "test.test"
 	var r Record
-	if r, ok = be.ToRecord(); !ok {
+	if r, ok = be.ToRecord(0); !ok {
 		t.Fatal("failed")
 	}
 	if !r.Timestamp.Equal(time.Date(2018, time.July, 20, 15, 3, 0, 0, time.UTC)) {
@@ -80,19 +80,19 @@ func TestEvent_ToRecord(t *testing.T) {
 
 func TestEvent_ToRecord_JSON(t *testing.T) {
 	var be Event
-	_, ok := be.ToRecord()
+	_, ok := be.ToRecord(0)
 	if ok {
 		t.Fatal("failed")
 	}
 	be.Message = `[2018/07/20 15:03:00.000] {"crid":"aaa", "topic":"x-test3", "duration":"aa"}`
-	_, ok = be.ToRecord()
+	_, ok = be.ToRecord(0)
 	if ok {
 		t.Fatal("failed")
 	}
 	be.Source = "/tmp/test2/_json_/test1.20180719.log"
 	be.Beat.Hostname = "test.test"
 	var r Record
-	if r, ok = be.ToRecord(); !ok {
+	if r, ok = be.ToRecord(0); !ok {
 		t.Fatal("failed")
 	}
 	if !r.Timestamp.Equal(time.Date(2018, time.July, 20, 15, 3, 0, 0, time.UTC)) {
