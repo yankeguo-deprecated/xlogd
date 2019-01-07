@@ -314,7 +314,7 @@ func main() {
 	}
 
 	// create the queue
-	queue = diskqueue.New("xlogd", options.DataDir, 1024*1024*1024, 20, 2*1024*1024, 10, time.Second*10, zeroLog2DiskQueueLog)
+	queue = diskqueue.New("xlogd", options.DataDir, 256*1024*1024, 20, 2*1024*1024, int64(options.Elasticsearch.Batch.Size), time.Second*20, zeroLog2DiskQueueLog)
 
 	// create elasticsearch client
 	if client, err = elastic.NewClient(elastic.SetURL(options.Elasticsearch.URLs...)); err != nil {
