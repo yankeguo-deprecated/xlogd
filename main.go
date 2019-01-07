@@ -94,7 +94,7 @@ func consumeRawEvent(raw []byte) {
 		return
 	}
 	// convert to record
-	if record, ok := event.ToRecord(); ok {
+	if record, ok := event.ToRecord(options.TimeOffset); ok {
 		// check should keyword be enforced
 		if checkRecordKeyword(record) {
 			var buf bytes.Buffer
@@ -195,10 +195,6 @@ func outputRoutine() {
 					c++
 					// increase total counter
 					atomic.AddInt64(&totalCount, 1)
-					// fix time offset if needed
-					if !r.NoTimeOffset {
-						r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
-					}
 					// create request
 					br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
 					log.Debug().Msg("new bulk request:\n" + br.String())

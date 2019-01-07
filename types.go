@@ -36,7 +36,7 @@ type Event struct {
 }
 
 // ToRecord implements RecordConvertible
-func (b Event) ToRecord() (r Record, ok bool) {
+func (b Event) ToRecord(offset int) (r Record, ok bool) {
 	// assign hostname
 	r.Hostname = b.Beat.Hostname
 	// decode source field
@@ -44,8 +44,12 @@ func (b Event) ToRecord() (r Record, ok bool) {
 		return
 	}
 	// decode message field
-	if ok = decodeBeatMessage(b.Message, r.Topic == eventTopicJSON, &r); !ok {
+	var noOffset bool
+	if noOffset, ok = decodeBeatMessage(b.Message, r.Topic == eventTopicJSON, &r); !ok {
 		return
+	}
+	if !noOffset {
+		r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(offset))
 	}
 	return
 }
@@ -61,8 +65,6 @@ type Record struct {
 	Message   string                 `json:"message,omitempty"` // the actual log message body
 	Keyword   string                 `json:"keyword"`           // comma separated keywords
 	Extra     map[string]interface{} `json:"extra,omitempty"`   // extra structured data
-
-	NoTimeOffset bool `json:"-"` // should skip timestamp offset
 }
 
 func (r Record) Map() (out map[string]interface{}) {

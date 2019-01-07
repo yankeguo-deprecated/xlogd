@@ -7,7 +7,7 @@ import (
 	"github.com/yankeguo/byteline"
 )
 
-func decodeBeatMessage(raw string, isJSON bool, r *Record) (ok bool) {
+func decodeBeatMessage(raw string, isJSON bool, r *Record) (noOffset bool, ok bool) {
 	var yyyy, MM, dd, hh, mm, ss, SSS int64
 	buf := []byte(raw)
 	if buf, _, ok = byteline.Run(
@@ -44,14 +44,15 @@ func decodeBeatMessage(raw string, isJSON bool, r *Record) (ok bool) {
 		}
 		// topic must exist
 		if !decodeExtraStr(r.Extra, "topic", &r.Topic) {
-			return false
+			ok = false
+			return
 		}
 		// optional extra 'project', 'crid'
 		decodeExtraStr(r.Extra, "project", &r.Project)
 		decodeExtraStr(r.Extra, "crid", &r.Crid)
 		// optional extract 'timestamp'
 		if decodeExtraTime(r.Extra, "timestamp", &r.Timestamp) {
-			r.NoTimeOffset = true
+			noOffset = true
 		}
 		// clear the message
 		r.Message = ""
