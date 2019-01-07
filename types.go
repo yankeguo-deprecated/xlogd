@@ -98,11 +98,10 @@ type Options struct {
 	// Bind
 	// bind address for redis protocol
 	Bind string `yaml:"bind"`
+	// DataDir
+	DataDir string `yaml:"data_dir"`
 	// Multi
 	Multi bool `yaml:"multi"`
-	// Capacity
-	// capacity of the queue
-	Capacity int `yaml:"capacity"`
 	// Elasticsearch
 	// Elasticsearch options
 	Elasticsearch ElasticsearchOptions `yaml:"elasticsearch"`
@@ -149,13 +148,13 @@ func LoadOptions(filename string) (opt Options, err error) {
 	if err = yaml.Unmarshal(buf, &opt); err != nil {
 		return
 	}
+	// check data_dir
+	if len(opt.DataDir) == 0 {
+		opt.DataDir = "/data/xlogd"
+	}
 	// check bind
 	if len(opt.Bind) == 0 {
 		opt.Bind = "0.0.0.0:6379"
-	}
-	// check capacity
-	if opt.Capacity <= 0 {
-		opt.Capacity = 10000
 	}
 	// check elasticsearch urls
 	if len(opt.Elasticsearch.URLs) == 0 {

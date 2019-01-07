@@ -1,5 +1,5 @@
 time_offset: -8
-capacity: 2000
+data_dir: /tmp/xlogd-test
 bind: 127.0.0.1:9966
 multi: false
 elasticsearch:

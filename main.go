@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"flag"
 	"os"
@@ -14,11 +16,11 @@ import (
 	"time"
 
 	"github.com/juju/ratelimit"
+	diskqueue "github.com/nsqio/go-diskqueue"
 	"github.com/olivere/elastic"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/tidwall/redcon"
-	_ "github.com/nsqio/go-diskqueue"
 )
 
 var (
@@ -29,7 +31,8 @@ var (
 	server *redcon.Server
 	client *elastic.Client
 
-	records       chan Record
+	queue diskqueue.Interface
+
 	limiter       *ratelimit.Bucket
 	totalConns    int64
 	connsSum      = map[string]int{}
@@ -41,6 +44,10 @@ var (
 
 	hostname string
 )
+
+func zeroLog2DiskQueueLog(lvl diskqueue.LogLevel, f string, args ...interface{}) {
+	log.WithLevel(zerolog.Level(lvl-1)).Msgf(f, args)
+}
 
 func increaseConnsSum(addr string) int {
 	connsSumMutex.Lock()
@@ -90,8 +97,11 @@ func consumeRawEvent(raw []byte) {
 	if record, ok := event.ToRecord(); ok {
 		// check should keyword be enforced
 		if checkRecordKeyword(record) {
-			// insert into channel
-			records <- record
+			var buf bytes.Buffer
+			encoder := gob.NewEncoder(&buf)
+			if err := encoder.Encode(record); err == nil {
+				queue.Put(buf.Bytes())
+			}
 		}
 	} else {
 		log.Debug().Str("event", string(raw)).Msg("failed to convert record")
@@ -135,9 +145,9 @@ func commandHandlerFunc(conn redcon.Conn, cmd redcon.Command) {
 		for _, raw := range cmd.Args[2:] {
 			consumeRawEvent(raw)
 		}
-		conn.WriteInt(len(records))
+		conn.WriteInt64(queue.Depth())
 	case "llen":
-		conn.WriteInt(len(records))
+		conn.WriteInt64(queue.Depth())
 	}
 }
 
@@ -149,49 +159,72 @@ func outputRoutine() {
 	shutdownGroup.Add(1)
 	defer shutdownGroup.Done()
 
+	// create the queue read channel
+	records := queue.ReadChan()
+
 	for {
 		// force GC
 		runtime.GC()
 
 		// check for the outputExiting
-		if shutdown && len(records) == 0 {
+		if shutdown && queue.Depth() == 0 {
 			break
 		}
 
-		// determine size
-		l := len(records)
+		// c counter
+		var c int
 
-		if l > options.Elasticsearch.Batch.Size {
-			// adjust size
-			l = options.Elasticsearch.Batch.Size
-		}
-
-		// skip if no records
-		if l == 0 {
-			continue
-		}
-
-		// wait for the limiter, slow down loop
-		limiter.Wait(int64(l))
-
-		// create bulk
+		// build the bulk
 		bs := client.Bulk()
 
-		// add bulk operation
-		for i := 0; i < l; i++ {
-			// take record
-			r := <-records
-			// increase total count
-			atomic.AddInt64(&totalCount, 1)
-			// fix time offset if needed
-			if !r.NoTimeOffset {
-				r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
+		// timer for 5 seconds
+		timer := time.NewTimer(time.Second * 3)
+
+	FOR_LOOP:
+		for {
+			select {
+			case buf := <-records:
+				{
+					// decode record
+					var r Record
+					dec := gob.NewDecoder(bytes.NewReader(buf))
+					if err := dec.Decode(&r); err != nil {
+						continue FOR_LOOP
+					}
+					// increase counter
+					c++
+					// increase total counter
+					atomic.AddInt64(&totalCount, 1)
+					// fix time offset if needed
+					if !r.NoTimeOffset {
+						r.Timestamp = r.Timestamp.Add(time.Hour * time.Duration(options.TimeOffset))
+					}
+					// create request
+					br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
+					log.Debug().Msg("new bulk request:\n" + br.String())
+					// append request to bulk
+					bs = bs.Add(br)
+					// break the loop if batch size exceeded
+					if c > options.Elasticsearch.Batch.Size {
+						log.Debug().Msg("batch size exceeded")
+						break FOR_LOOP
+					}
+				}
+			case <-timer.C:
+				{
+					// break the loop if timeout exceeded
+					log.Debug().Msg("batch timeout exceeded")
+					break FOR_LOOP
+				}
 			}
-			// create request
-			br := elastic.NewBulkIndexRequest().Index(r.Index()).Type("_doc").Doc(r.Map())
-			log.Debug().Msg("new bulk request:\n" + br.String())
-			// append request to bulk
-			bs = bs.Add(br)
+		}
+
+		// clear the timer
+		timer.Stop()
+
+		// continue if no records
+		if c == 0 {
+			continue
 		}
 
 		// do the bulk operation
@@ -200,6 +233,9 @@ func outputRoutine() {
 			log.Info().Err(err).Msg("failed to bulk insert")
 		}
 		log.Debug().Msg("bulk committed")
+
+		// slow down loop with limiter
+		limiter.Wait(int64(c))
 	}
 }
 
@@ -218,7 +254,7 @@ func statsRoutine() {
 			Hostname:      hostname,
 			RecordsTotal:  totalCount,
 			Records1M:     totalCount - count,
-			RecordsQueued: int64(len(records)),
+			RecordsQueued: queue.Depth(),
 		}
 		// insert stats
 		if _, err := client.Index().Index(r.Index()).Type("_doc").BodyJson(&r).Do(context.Background()); err != nil {
@@ -270,15 +306,22 @@ func main() {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
 
+	// ensure data dir
+	if err = os.MkdirAll(options.DataDir, 0755); err != nil {
+		log.Error().Err(err).Msg("failed to ensure xlog data dir")
+		os.Exit(1)
+		return
+	}
+
+	// create the queue
+	queue = diskqueue.New("xlogd", options.DataDir, 1024*1024*1024, 20, 2*1024*1024, 10, time.Second*10, zeroLog2DiskQueueLog)
+
 	// create elasticsearch client
 	if client, err = elastic.NewClient(elastic.SetURL(options.Elasticsearch.URLs...)); err != nil {
 		log.Error().Err(err).Msg("failed to create elasticsearch client")
 		os.Exit(1)
 		return
 	}
-
-	// allocate records chan
-	records = make(chan Record, options.Capacity)
 
 	// initialize limiter
 	limiter = ratelimit.NewBucket(
