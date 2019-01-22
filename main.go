@@ -31,7 +31,7 @@ var (
 	server *redcon.Server
 	client *elastic.Client
 
-	queue diskqueue.Interface
+	queue diskqueue.DiskQueue
 
 	limiter       *ratelimit.Bucket
 	totalConns    int64
@@ -44,10 +44,6 @@ var (
 
 	hostname string
 )
-
-func zeroLog2DiskQueueLog(lvl diskqueue.LogLevel, f string, args ...interface{}) {
-	log.WithLevel(zerolog.Level(lvl-1)).Msgf(f, args)
-}
 
 func increaseConnsSum(addr string) int {
 	connsSumMutex.Lock()
@@ -313,7 +309,7 @@ func main() {
 	}
 
 	// create the queue
-	queue = diskqueue.New("xlogd", options.DataDir, 256*1024*1024, 20, 2*1024*1024, int64(options.Elasticsearch.Batch.Size), time.Second*20, zeroLog2DiskQueueLog)
+	queue = diskqueue.New("xlogd", options.DataDir, 256*1024*1024, 20, 2*1024*1024, int64(options.Elasticsearch.Batch.Size), time.Second*20)
 
 	// create elasticsearch client
 	if client, err = elastic.NewClient(elastic.SetURL(options.Elasticsearch.URLs...)); err != nil {

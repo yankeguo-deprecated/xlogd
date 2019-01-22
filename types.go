@@ -90,7 +90,7 @@ func (r Record) Map() (out map[string]interface{}) {
 
 // Index index for record in elasticsearch
 func (r Record) Index() string {
-	return fmt.Sprintf("%s-%s-%04d-%02d-%02d", r.Topic, r.Env, r.Timestamp.Year(), r.Timestamp.Month(), r.Timestamp.Day())
+	return fmt.Sprintf("%s-%s-%s-%04d-%02d-%02d", r.Topic, r.Env, r.Project, r.Timestamp.Year(), r.Timestamp.Month(), r.Timestamp.Day())
 }
 
 // ToOperation convert record to operation

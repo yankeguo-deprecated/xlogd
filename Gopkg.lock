@@ -2,12 +2,12 @@
 
 
 [[projects]]
-  digest = "1:342378ac4dcb378a5448dd723f0784ae519383532f5e70ade24132c4c8693202"
+  digest = "1:4d2e5a73dc1500038e504a8d78b986630e3626dc027bc030ba5c75da257cdb96"
   name = "github.com/go-yaml/yaml"
   packages = ["."]
   pruneopts = "UT"
-  revision = "5420a8b6744d3b0345ab293f6fcba19c978f1183"
-  version = "v2.2.1"
+  revision = "51d6538a90f86fe93ac480b35f37b2be17fef232"
+  version = "v2.2.2"
 
 [[projects]]
   digest = "1:190ff84d9b2ed6589088f178cba8edb4b8ecb334df4572421fb016be1ac20463"
@@ -31,7 +31,7 @@
   revision = "60711f1a8329503b04e1c88535f419d0bb440bff"
 
 [[projects]]
-  digest = "1:115948b36ea412cfbc289f7b911ea0b0f536917cbd499d9df6a3d3ab58e6edc0"
+  digest = "1:e9ba3a532b2aedc8f8dcc06e136f794d496be02eb2ab17fb56e4b30152d0cfc1"
   name = "github.com/olivere/elastic"
   packages = [
     ".",
@@ -39,16 +39,16 @@
     "uritemplates",
   ]
   pruneopts = "UT"
-  revision = "0f13c62d4153081f2be7d0e136353b57dd3f1619"
-  version = "v6.2.13"
+  revision = "f5738570b28a4b5fab39442e3a5b5ffc599a562c"
+  version = "v6.2.15"
 
 [[projects]]
-  digest = "1:40e195917a951a8bf867cd05de2a46aaf1806c50cf92eebf4c16f78cd196f747"
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
   name = "github.com/pkg/errors"
   packages = ["."]
   pruneopts = "UT"
-  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
-  version = "v0.8.0"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
 
 [[projects]]
   digest = "1:a073c2dd83aa92060bd5b551e3a19a40f8e24d4aaa7e7da767ee9c69f07b533a"
@@ -81,11 +81,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:03e565c973c414d11764567878420b4994de92773b3bd9cc565b7f74b9bf5554"
+  digest = "1:43fc6958aec54ab8a2bbc847f67c5eb737fb730c312d9c3d296eab1c88fd77a0"
   name = "github.com/yankeguo/diskqueue"
   packages = ["."]
   pruneopts = "UT"
-  revision = "9469a79fe564ccd07a0e6d99e5333c655456d2d3"
+  revision = "083383d326f2f5889e2484f85fc7dc4099e7b5aa"
 
 [solve-meta]
   analyzer-name = "dep"

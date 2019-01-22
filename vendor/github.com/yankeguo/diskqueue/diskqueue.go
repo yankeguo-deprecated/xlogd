@@ -13,39 +13,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
-// logging stuff copied from github.com/nsqio/nsq/internal/lg
-
-type LogLevel int
-
-const (
-	DEBUG = LogLevel(1)
-	INFO  = LogLevel(2)
-	WARN  = LogLevel(3)
-	ERROR = LogLevel(4)
-	FATAL = LogLevel(5)
-)
-
-type AppLogFunc func(lvl LogLevel, f string, args ...interface{})
-
-func (l LogLevel) String() string {
-	switch l {
-	case 1:
-		return "DEBUG"
-	case 2:
-		return "INFO"
-	case 3:
-		return "WARNING"
-	case 4:
-		return "ERROR"
-	case 5:
-		return "FATAL"
-	}
-	panic("invalid LogLevel")
-}
-
-type Interface interface {
+// DiskQueue interface for disk queue
+type DiskQueue interface {
 	Put([]byte) error
 	ReadChan() chan []byte // this is expected to be an *unbuffered* channel
 	Close() error
@@ -98,15 +71,13 @@ type diskQueue struct {
 	emptyResponseChan chan error
 	exitChan          chan int
 	exitSyncChan      chan int
-
-	logf AppLogFunc
 }
 
 // New instantiates an instance of diskQueue, retrieving metadata
 // from the filesystem and starting the read ahead goroutine
 func New(name string, dataPath string, maxBytesPerFile int64,
 	minMsgSize int32, maxMsgSize int32,
-	syncEvery int64, syncTimeout time.Duration, logf AppLogFunc) Interface {
+	syncEvery int64, syncTimeout time.Duration) DiskQueue {
 	d := diskQueue{
 		name:              name,
 		dataPath:          dataPath,
@@ -122,13 +93,12 @@ func New(name string, dataPath string, maxBytesPerFile int64,
 		exitSyncChan:      make(chan int),
 		syncEvery:         syncEvery,
 		syncTimeout:       syncTimeout,
-		logf:              logf,
 	}
 
 	// no need to lock here, nothing else could possibly be touching this instance
 	err := d.retrieveMetaData()
 	if err != nil && !os.IsNotExist(err) {
-		d.logf(ERROR, "DISKQUEUE(%s) failed to retrieveMetaData - %s", d.name, err)
+		log.Error().Err(err).Str("name", d.name).Msg("diskqueue: failed to retrieve Metadata")
 	}
 
 	go d.ioLoop()
@@ -178,9 +148,9 @@ func (d *diskQueue) exit(deleted bool) error {
 	d.exitFlag = 1
 
 	if deleted {
-		d.logf(INFO, "DISKQUEUE(%s): deleting", d.name)
+		log.Info().Str("name", d.name).Msg("diskqueue: deleting")
 	} else {
-		d.logf(INFO, "DISKQUEUE(%s): closing", d.name)
+		log.Info().Str("name", d.name).Msg("diskqueue: closing")
 	}
 
 	close(d.exitChan)
@@ -210,7 +180,7 @@ func (d *diskQueue) Empty() error {
 		return errors.New("exiting")
 	}
 
-	d.logf(INFO, "DISKQUEUE(%s): emptying", d.name)
+	log.Info().Str("name", d.name).Msg("diskqueue: emptying")
 
 	d.emptyChan <- 1
 	return <-d.emptyResponseChan
@@ -221,7 +191,7 @@ func (d *diskQueue) deleteAllFiles() error {
 
 	innerErr := os.Remove(d.metaDataFileName())
 	if innerErr != nil && !os.IsNotExist(innerErr) {
-		d.logf(ERROR, "DISKQUEUE(%s) failed to remove metadata file - %s", d.name, innerErr)
+		log.Error().Err(innerErr).Str("name", d.name).Msg("diskqueue: failed to remove metadata file")
 		return innerErr
 	}
 
@@ -245,7 +215,7 @@ func (d *diskQueue) skipToNextRWFile() error {
 		fn := d.fileName(i)
 		innerErr := os.Remove(fn)
 		if innerErr != nil && !os.IsNotExist(innerErr) {
-			d.logf(ERROR, "DISKQUEUE(%s) failed to remove data file - %s", d.name, innerErr)
+			log.Error().Err(innerErr).Str("name", d.name).Msg("diskqueue: failed to remove data file")
 			err = innerErr
 		}
 	}
@@ -274,7 +244,7 @@ func (d *diskQueue) readOne() ([]byte, error) {
 			return nil, err
 		}
 
-		d.logf(INFO, "DISKQUEUE(%s): readOne() opened %s", d.name, curFileName)
+		log.Info().Str("name", d.name).Str("file", curFileName).Msg("diskqueue: readOne() opened file")
 
 		if d.readPos > 0 {
 			_, err = d.readFile.Seek(d.readPos, 0)
@@ -346,7 +316,7 @@ func (d *diskQueue) writeOne(data []byte) error {
 			return err
 		}
 
-		d.logf(INFO, "DISKQUEUE(%s): writeOne() opened %s", d.name, curFileName)
+		log.Info().Str("name", d.name).Str("file", curFileName).Msg("diskqueue: writeOne() opened file")
 
 		if d.writePos > 0 {
 			_, err = d.writeFile.Seek(d.writePos, 0)
@@ -394,7 +364,7 @@ func (d *diskQueue) writeOne(data []byte) error {
 		// sync every time we start writing to a new file
 		err = d.sync()
 		if err != nil {
-			d.logf(ERROR, "DISKQUEUE(%s) failed to sync - %s", d.name, err)
+			log.Error().Err(err).Str("name", d.name).Msg("diskqueue: failed to sync")
 		}
 
 		if d.writeFile != nil {
@@ -499,13 +469,9 @@ func (d *diskQueue) checkTailCorruption(depth int64) {
 	// if depth isn't 0 something went wrong
 	if depth != 0 {
 		if depth < 0 {
-			d.logf(ERROR,
-				"DISKQUEUE(%s) negative depth at tail (%d), metadata corruption, resetting 0...",
-				d.name, depth)
+			log.Error().Str("name", d.name).Int64("depth", depth).Msg("diskqueue: negative depth at tail, metadata corruption, resetting 0...")
 		} else if depth > 0 {
-			d.logf(ERROR,
-				"DISKQUEUE(%s) positive depth at tail (%d), data loss, resetting 0...",
-				d.name, depth)
+			log.Error().Str("name", d.name).Int64("depth", depth).Msg("diskqueue: positive depth at tail, data loss, resetting 0...")
 		}
 		// force set depth 0
 		atomic.StoreInt64(&d.depth, 0)
@@ -514,15 +480,29 @@ func (d *diskQueue) checkTailCorruption(depth int64) {
 
 	if d.readFileNum != d.writeFileNum || d.readPos != d.writePos {
 		if d.readFileNum > d.writeFileNum {
-			d.logf(ERROR,
-				"DISKQUEUE(%s) readFileNum > writeFileNum (%d > %d), corruption, skipping to next writeFileNum and resetting 0...",
-				d.name, d.readFileNum, d.writeFileNum)
+			log.Error().Str(
+				"name",
+				d.name,
+			).Int64(
+				"readFileNum",
+				d.readFileNum,
+			).Int64(
+				"writeFileNum",
+				d.writeFileNum,
+			).Msg("diskqueue: readFileNum > writeFileNum, corruption, skipping to next writeFileNum and resetting 0...")
 		}
 
 		if d.readPos > d.writePos {
-			d.logf(ERROR,
-				"DISKQUEUE(%s) readPos > writePos (%d > %d), corruption, skipping to next writeFileNum and resetting 0...",
-				d.name, d.readPos, d.writePos)
+			log.Error().Str(
+				"name",
+				d.name,
+			).Int64(
+				"readPos",
+				d.readPos,
+			).Int64(
+				"writePos",
+				d.writePos,
+			).Msg("diskqueue: readPos > writePos, corruption, skipping to next writeFileNum and resetting 0...")
 		}
 
 		d.skipToNextRWFile()
@@ -544,7 +524,7 @@ func (d *diskQueue) moveForward() {
 		fn := d.fileName(oldReadFileNum)
 		err := os.Remove(fn)
 		if err != nil {
-			d.logf(ERROR, "DISKQUEUE(%s) failed to Remove(%s) - %s", d.name, fn, err)
+			log.Error().Err(err).Str("name", d.name).Str("file", fn).Msg("diskqueue: failed to remove file")
 		}
 	}
 
@@ -567,15 +547,11 @@ func (d *diskQueue) handleReadError() {
 	badFn := d.fileName(d.readFileNum)
 	badRenameFn := badFn + ".bad"
 
-	d.logf(WARN,
-		"DISKQUEUE(%s) jump to next file and saving bad file as %s",
-		d.name, badRenameFn)
+	log.Warn().Str("name", d.name).Str("new-file", badRenameFn).Msg("diskqueue: jump to next file and saving bad file...")
 
 	err := os.Rename(badFn, badRenameFn)
 	if err != nil {
-		d.logf(ERROR,
-			"DISKQUEUE(%s) failed to rename bad diskqueue file %s to %s",
-			d.name, badFn, badRenameFn)
+		log.Error().Err(err).Str("name", d.name).Str("file", badFn).Str("new-file", badRenameFn).Msg("diskqueue: failed to rename bad diskqueue file")
 	}
 
 	d.readFileNum++
@@ -612,7 +588,7 @@ func (d *diskQueue) ioLoop() {
 		if d.needSync {
 			err = d.sync()
 			if err != nil {
-				d.logf(ERROR, "DISKQUEUE(%s) failed to sync - %s", d.name, err)
+				log.Error().Err(err).Str("name", d.name).Msg("diskqueue: failed to sync")
 			}
 			count = 0
 		}
@@ -621,8 +597,7 @@ func (d *diskQueue) ioLoop() {
 			if d.nextReadPos == d.readPos {
 				dataRead, err = d.readOne()
 				if err != nil {
-					d.logf(ERROR, "DISKQUEUE(%s) reading at %d of %s - %s",
-						d.name, d.readPos, d.fileName(d.readFileNum), err)
+					log.Error().Err(err).Str("name", d.name).Int64("readPos", d.readPos).Str("file", d.fileName(d.readFileNum)).Msg("diskqueue: read failed")
 					d.handleReadError()
 					continue
 				}
@@ -657,7 +632,7 @@ func (d *diskQueue) ioLoop() {
 	}
 
 exit:
-	d.logf(INFO, "DISKQUEUE(%s): closing ... ioLoop", d.name)
+	log.Info().Str("name", d.name).Msg("diskqueue: closing io loop")
 	syncTicker.Stop()
 	d.exitSyncChan <- 1
 }
