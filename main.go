@@ -16,11 +16,11 @@ import (
 	"time"
 
 	"github.com/juju/ratelimit"
-	diskqueue "github.com/nsqio/go-diskqueue"
 	"github.com/olivere/elastic"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/tidwall/redcon"
+	"github.com/yankeguo/diskqueue"
 )
 
 var (

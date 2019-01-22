@@ -31,14 +31,6 @@
   revision = "60711f1a8329503b04e1c88535f419d0bb440bff"
 
 [[projects]]
-  branch = "master"
-  digest = "1:1e8246c87e2751864809878173b880fa6f07d6ae0354c3b803ada7da32d9264a"
-  name = "github.com/nsqio/go-diskqueue"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "74cfbc9de8399a7fa86d676b908b002120826fc0"
-
-[[projects]]
   digest = "1:115948b36ea412cfbc289f7b911ea0b0f536917cbd499d9df6a3d3ab58e6edc0"
   name = "github.com/olivere/elastic"
   packages = [
@@ -87,19 +79,27 @@
   pruneopts = "UT"
   revision = "a291935bab7a2581d11f04d536b36576bce2d760"
 
+[[projects]]
+  branch = "master"
+  digest = "1:03e565c973c414d11764567878420b4994de92773b3bd9cc565b7f74b9bf5554"
+  name = "github.com/yankeguo/diskqueue"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9469a79fe564ccd07a0e6d99e5333c655456d2d3"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
     "github.com/go-yaml/yaml",
     "github.com/juju/ratelimit",
-    "github.com/nsqio/go-diskqueue",
     "github.com/olivere/elastic",
     "github.com/pkg/errors",
     "github.com/rs/zerolog",
     "github.com/rs/zerolog/log",
     "github.com/tidwall/redcon",
     "github.com/yankeguo/byteline",
+    "github.com/yankeguo/diskqueue",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
