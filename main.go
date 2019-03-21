@@ -19,8 +19,8 @@ import (
 	"github.com/olivere/elastic"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/tidwall/redcon"
 	"github.com/yankeguo/diskqueue"
+	"github.com/yankeguo/redcon"
 )
 
 var (

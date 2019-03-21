@@ -200,6 +200,25 @@ func (s *TLSServer) ListenAndServe() error {
 	return s.ListenServeAndSignal(nil)
 }
 
+// Serve creates a new server and serves with the given net.Listener.
+func Serve(ln net.Listener,
+	handler func(conn Conn, cmd Command),
+	accept func(conn Conn) bool,
+	closed func(conn Conn, err error),
+) error {
+	s := &Server{
+		net:     ln.Addr().Network(),
+		laddr:   ln.Addr().String(),
+		ln:      ln,
+		handler: handler,
+		accept:  accept,
+		closed:  closed,
+		conns:   make(map[*conn]bool),
+	}
+
+	return serve(s)
+}
+
 // ListenAndServe creates a new server and binds to addr configured on "tcp" network net.
 func ListenAndServe(addr string,
 	handler func(conn Conn, cmd Command),
@@ -259,6 +278,14 @@ func (s *Server) ListenServeAndSignal(signal chan error) error {
 	return serve(s)
 }
 
+// Serve serves incoming connections with the given net.Listener.
+func (s *Server) Serve(ln net.Listener) error {
+	s.ln = ln
+	s.net = ln.Addr().Network()
+	s.laddr = ln.Addr().String()
+	return serve(s)
+}
+
 // ListenServeAndSignal serves incoming connections and passes nil or error
 // when listening. signal can be nil.
 func (s *TLSServer) ListenServeAndSignal(signal chan error) error {
@@ -276,18 +303,22 @@ func (s *TLSServer) ListenServeAndSignal(signal chan error) error {
 	return serve(s.Server)
 }
 
+func (s *Server) close() {
+	s.ln.Close()
+	s.closeConnections()
+}
+
+func (s *Server) closeConnections() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for c := range s.conns {
+		c.Close()
+	}
+	s.conns = nil
+}
+
 func serve(s *Server) error {
-	defer func() {
-		s.ln.Close()
-		func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			for c := range s.conns {
-				c.Close()
-			}
-			s.conns = nil
-		}()
-	}()
+	defer s.close()
 	for {
 		lnconn, err := s.ln.Accept()
 		if err != nil {
@@ -319,64 +350,65 @@ func serve(s *Server) error {
 	}
 }
 
+func handleCmds(s *Server, c *conn) error {
+	// read commands and feed back to the client
+	for {
+		// read pipeline commands
+		cmds, err := c.rd.readCommands(nil)
+		if err != nil {
+			if err, ok := err.(*errProtocol); ok {
+				// All protocol errors should attempt a response to
+				// the client. Ignore write errors.
+				c.wr.WriteError("ERR " + err.Error())
+				c.wr.Flush()
+			}
+			return err
+		}
+		c.cmds = cmds
+		for len(c.cmds) > 0 {
+			cmd := c.cmds[0]
+			if len(c.cmds) == 1 {
+				c.cmds = nil
+			} else {
+				c.cmds = c.cmds[1:]
+			}
+			s.handler(c, cmd)
+		}
+		if c.detached {
+			// client has been detached
+			return errDetached
+		}
+		if c.closed {
+			return nil
+		}
+		if err := c.wr.Flush(); err != nil {
+			return err
+		}
+	}
+}
+
+func closeConn(s *Server, c *conn, err error) {
+	// remove the conn from the server
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.conns, c)
+	if s.closed != nil {
+		if err == io.EOF {
+			err = nil
+		}
+		s.closed(c, err)
+	}
+}
+
 // handle manages the server connection.
 func handle(s *Server, c *conn) {
 	var err error
-	defer func() {
-		if err != errDetached {
-			// do not close the connection when a detach is detected.
-			c.conn.Close()
-		}
-		func() {
-			// remove the conn from the server
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			delete(s.conns, c)
-			if s.closed != nil {
-				if err == io.EOF {
-					err = nil
-				}
-				s.closed(c, err)
-			}
-		}()
-	}()
+	if err = handleCmds(s, c); err != errDetached {
+		// do not close the connection when a detach is detected.
+		c.conn.Close()
+	}
 
-	err = func() error {
-		// read commands and feed back to the client
-		for {
-			// read pipeline commands
-			cmds, err := c.rd.readCommands(nil)
-			if err != nil {
-				if err, ok := err.(*errProtocol); ok {
-					// All protocol errors should attempt a response to
-					// the client. Ignore write errors.
-					c.wr.WriteError("ERR " + err.Error())
-					c.wr.Flush()
-				}
-				return err
-			}
-			c.cmds = cmds
-			for len(c.cmds) > 0 {
-				cmd := c.cmds[0]
-				if len(c.cmds) == 1 {
-					c.cmds = nil
-				} else {
-					c.cmds = c.cmds[1:]
-				}
-				s.handler(c, cmd)
-			}
-			if c.detached {
-				// client has been detached
-				return errDetached
-			}
-			if c.closed {
-				return nil
-			}
-			if err := c.wr.Flush(); err != nil {
-				return err
-			}
-		}
-	}()
+	closeConn(s, c, err)
 }
 
 // conn represents a client connection

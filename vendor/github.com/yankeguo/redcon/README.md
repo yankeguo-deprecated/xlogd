@@ -3,13 +3,15 @@
     src="logo.png" 
     width="336" height="75" border="0" alt="REDCON">
 <br>
-<a href="https://travis-ci.org/tidwall/redcon"><img src="https://img.shields.io/travis/tidwall/redcon.svg?style=flat-square" alt="Build Status"></a>
-<a href="https://godoc.org/github.com/tidwall/redcon"><img src="https://img.shields.io/badge/api-reference-blue.svg?style=flat-square" alt="GoDoc"></a>
+<a href="https://travis-ci.org/yankeguo/redcon"><img src="https://img.shields.io/travis/yankeguo/redcon.svg?style=flat-square" alt="Build Status"></a>
+<a href="https://godoc.org/github.com/yankeguo/redcon"><img src="https://img.shields.io/badge/api-reference-blue.svg?style=flat-square" alt="GoDoc"></a>
 </p>
 
 <p align="center">Fast Redis compatible server framework for Go</p>
 
 Redcon is a custom Redis server framework for Go that is fast and simple to use. The reason for this library it to give an efficient server front-end for the [BuntDB](https://github.com/tidwall/buntdb) and [Tile38](https://github.com/tidwall/tile38) projects.
+
+**Forked from https://github.com/tidwall/redcon**
 
 Features
 --------
@@ -23,7 +25,7 @@ Installing
 ----------
 
 ```
-go get -u github.com/tidwall/redcon
+go get -u github.com/yankeguo/redcon
 ```
 
 Example
@@ -51,7 +53,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tidwall/redcon"
+	"github.com/yankeguo/redcon"
 )
 
 var addr = ":6380"

@@ -6,8 +6,9 @@ import (
 	"io/ioutil"
 	"time"
 
+	"errors"
+
 	"github.com/go-yaml/yaml"
-	"github.com/pkg/errors"
 )
 
 const (

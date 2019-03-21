@@ -1,0 +1,26 @@
+# github.com/go-yaml/yaml v2.1.0+incompatible
+github.com/go-yaml/yaml
+# github.com/juju/ratelimit v1.0.1
+github.com/juju/ratelimit
+# github.com/mailru/easyjson v0.0.0-20190312143242-1de009706dbe
+github.com/mailru/easyjson
+github.com/mailru/easyjson/jlexer
+github.com/mailru/easyjson/jwriter
+github.com/mailru/easyjson/buffer
+# github.com/olivere/elastic v6.2.16+incompatible
+github.com/olivere/elastic
+github.com/olivere/elastic/config
+github.com/olivere/elastic/uritemplates
+# github.com/pkg/errors v0.8.1
+github.com/pkg/errors
+# github.com/rs/zerolog v1.13.0
+github.com/rs/zerolog
+github.com/rs/zerolog/log
+github.com/rs/zerolog/internal/cbor
+github.com/rs/zerolog/internal/json
+# github.com/yankeguo/byteline v0.0.0-20180926111845-a291935bab7a
+github.com/yankeguo/byteline
+# github.com/yankeguo/diskqueue v0.0.0-20190318055503-3d0cdd3b6203
+github.com/yankeguo/diskqueue
+# github.com/yankeguo/redcon v0.0.0-20190321081658-dc981ec4b1b0
+github.com/yankeguo/redcon
