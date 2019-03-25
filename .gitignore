@@ -16,3 +16,6 @@ binfs.gen.go
 
 # output
 xlogd
+
+# Goland
+/.idea

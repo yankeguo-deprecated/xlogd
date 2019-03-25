@@ -129,6 +129,9 @@ type Options struct {
 	// EnforceKeyword
 	// topic should be keyword enforced
 	EnforceKeyword []string `yaml:"enforce_keyword"`
+	// Ignore
+	// topic should be ignored
+	Ignore []string `yaml:"ignore"`
 }
 
 // ElasticsearchOptions options for ElasticSearch

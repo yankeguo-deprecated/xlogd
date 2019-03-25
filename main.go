@@ -66,8 +66,11 @@ func acceptHandlerFunc(conn redcon.Conn) bool {
 	return true
 }
 
-func checkRecordKeyword(r Record) bool {
-	if strSliceContains(options.EnforceKeyword, r.Topic) && len(r.Keyword) == 0 {
+func checkRecordTopic(r Record) bool {
+	if stringSliceContainsIgnoreCase(options.EnforceKeyword, r.Topic) && len(r.Keyword) == 0 {
+		return false
+	}
+	if stringSliceContainsIgnoreCase(options.Ignore, r.Topic) {
 		return false
 	}
 	return true
@@ -92,7 +95,7 @@ func consumeRawEvent(raw []byte) {
 	// convert to record
 	if record, ok := event.ToRecord(options.TimeOffset); ok {
 		// check should keyword be enforced
-		if checkRecordKeyword(record) {
+		if checkRecordTopic(record) {
 			// convert to operation
 			o := record.ToOperation()
 			// encode operation

@@ -122,9 +122,9 @@ func decodeExtraTime(m map[string]interface{}, key string, out *time.Time) bool 
 	return false
 }
 
-func strSliceContains(s []string, t string) bool {
+func stringSliceContainsIgnoreCase(s []string, t string) bool {
 	for _, r := range s {
-		if r == t {
+		if strings.ToLower(r) == strings.ToLower(t) {
 			return true
 		}
 	}
