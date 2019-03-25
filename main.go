@@ -45,6 +45,11 @@ var (
 	hostname string
 )
 
+var (
+	// Version version of xlogd, build time variable
+	Version = "unknown"
+)
+
 func increaseConnsSum(addr string) int {
 	connsSumMutex.Lock()
 	defer connsSumMutex.Unlock()
@@ -170,7 +175,7 @@ func outputRoutine() {
 		runtime.GC()
 
 		// check for the outputExiting
-		if shutdown && queue.Depth() == 0 {
+		if shutdown {
 			break
 		}
 
@@ -278,7 +283,7 @@ func main() {
 
 	// init logger
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: true})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: true, TimeFormat: time.RFC3339})
 
 	// decode command line arguments
 	flag.StringVar(&optionsFile, "c", "/etc/xlogd.yml", "config file")
@@ -338,7 +343,7 @@ func main() {
 		os.Exit(1)
 		return
 	}
-	log.Info().Str("bind", options.Bind).Msg("server started")
+	log.Info().Str("bind", options.Bind).Str("version", Version).Msg("server started")
 
 	// start outputRoutine
 	go outputRoutine()
