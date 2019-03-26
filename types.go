@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"time"
 
 	"errors"
@@ -32,7 +33,7 @@ func (r Stats) Index() string {
 type Event struct {
 	Beat struct {
 		Hostname string `json:"hostname"`
-	} `json:"beat"` // contains hostname
+	} `json:"beat"`                 // contains hostname
 	Message string `json:"message"` // contains timestamp, crid
 	Source  string `json:"source"`  // contains env, topic, project
 }
@@ -47,7 +48,7 @@ func (b Event) ToRecord(offset int) (r Record, ok bool) {
 	}
 	// decode message field
 	var noOffset bool
-	if noOffset, ok = decodeBeatMessage(b.Message, r.Topic == eventTopicJSON, &r); !ok {
+	if noOffset, ok = decodeBeatMessage(b.Message, strings.Contains(r.Topic, eventTopicJSON), &r); !ok {
 		return
 	}
 	if !noOffset {
